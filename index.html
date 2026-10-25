@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="it">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f6f3">
+    <title>MIO Light — Catalogo configurabile</title>
+    <link rel="stylesheet" href="./styles.css">
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "./vendor/three/build/three.module.js",
+          "three/addons/": "./vendor/three/examples/jsm/"
+        }
+      }
+    </script>
+    <script type="module" src="./app.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <a class="brand" href="./" aria-label="MIO Light, home">
+        <span class="brand-mark" aria-hidden="true">
+          <svg viewBox="0 0 36 36" fill="none">
+            <path d="M9 25V12.5l9 7 9-7V25M18 19.5V30" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/>
+            <circle cx="18" cy="7" r="2.2" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="brand-copy"><strong>MIO LIGHT</strong><small>CATALOGO CONFIGURABILE</small></span>
+      </a>
+      <div class="topbar-right">
+        <span class="environment-tag"><span class="status-dot"></span> Ambiente demo</span>
+        <span class="user-avatar" aria-label="Operatore">O</span>
+      </div>
+    </header>
+
+    <div class="app-layout">
+      <aside class="sidebar">
+        <div class="sidebar-section-label">WORKSPACE</div>
+        <a class="sidebar-link selected" href="#catalogo">
+          <span class="nav-icon" aria-hidden="true">▦</span>
+          Catalogo MIO Light
+          <span class="nav-count">01</span>
+        </a>
+        <div class="sidebar-section-label steps-label">NUOVA CONFIGURAZIONE</div>
+        <nav class="step-nav" id="stepNav" aria-label="Fasi configurazione"></nav>
+        <div class="sidebar-foot">
+          <span class="source-symbol" aria-hidden="true">i</span>
+          <div><strong>Integrazione demo</strong><p>Dati locali, API non collegate</p></div>
+        </div>
+      </aside>
+
+      <main class="main-area">
+        <div class="page-heading">
+          <div>
+            <div class="breadcrumb"><span>Catalogo MIO Light</span><span class="breadcrumb-sep">/</span><strong>Nuovo prodotto configurabile</strong></div>
+            <h1 id="pageTitle">Nuova configurazione</h1>
+            <p id="pageSubtitle">Seleziona un prodotto esistente per iniziare il percorso guidato.</p>
+          </div>
+          <div class="heading-actions">
+            <span class="draft-state" id="draftStatus"><span class="status-dot"></span> Bozza non salvata</span>
+            <button class="button button-secondary" id="saveDraftButton" type="button">
+              <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M4 3.5h10l2.5 2.5v10.5H3.5V4A.5.5 0 0 1 4 3.5Z"/><path d="M6.5 3.5v4h6v-4M6.5 16.5v-5h7v5"/></svg>
+              Salva bozza
+            </button>
+          </div>
+        </div>
+
+        <div class="progress-track" aria-label="Avanzamento">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+
+        <div class="content-grid">
+          <section class="work-panel" id="workPanel" aria-live="polite"></section>
+          <aside class="context-panel" id="contextPanel"></aside>
+        </div>
+        <footer class="page-footer"><span>© MIO Light · Prototipo operatore</span><span>Documentazione funzionale v1.1</span></footer>
+      </main>
+    </div>
+    <div class="toast-region" id="toastRegion" aria-live="polite" aria-atomic="true"></div>
+  </body>
+</html>

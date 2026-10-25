@@ -268,3 +268,15 @@ h1 { margin: 12px 0 5px; font-family: Manrope, sans-serif; font-size: clamp(22px
   .product-badge { font-size: 7px; }
   .page-footer { font-size: 7px; }
 }
+
+.attribute-head { display: grid; grid-template-columns: 1fr 1.3fr 80px 1fr auto; align-items: end; gap: 10px; padding: 12px; background: #fafbf9; }
+.attribute-head label { display: flex; flex-direction: column; gap: 4px; color: #758079; font-size: 9px; font-weight: 700; }
+.option-edit-row { display: grid; grid-template-columns: minmax(110px, .8fr) minmax(130px, 1.2fr) minmax(140px, 1fr) minmax(150px, 1fr); align-items: center; gap: 10px; padding: 9px 12px; border-top: 1px solid #eef0ed; }
+.option-edit-row .text-input, .option-edit-row .select-input { min-height: 32px; font-size: 10px; }
+@media (max-width: 1100px) {
+  .attribute-head { grid-template-columns: 1fr 1fr; }
+  .option-edit-row { grid-template-columns: 1fr 1fr; }
+}
+@media (max-width: 560px) {
+  .attribute-head, .option-edit-row { grid-template-columns: 1fr; }
+}

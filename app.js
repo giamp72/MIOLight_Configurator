@@ -1,8 +1,8 @@
 const STEPS = [
   { title: 'Prodotto', hint: 'Selezione articolo' },
   { title: 'Modello 3D', hint: 'Carica e verifica' },
+  { title: 'Attributi', hint: 'Opzioni, materiali, JPG' },
   { title: 'Mappatura', hint: 'Collega le mesh' },
-  { title: 'Aspetto', hint: 'Materiali e anteprime' },
   { title: 'Default e test', hint: 'Verifica il prodotto' },
   { title: 'Pubblicazione', hint: 'Valida e pubblica' }
 ];
@@ -113,6 +113,7 @@ const freshState = () => ({
   meshes: [],
   materials: [],
   meshMap: {},
+  attributes: null,
   optionMap: {},
   defaultsApplied: false,
   testChecks: { alternatives: false, compatibility: false },
@@ -169,7 +170,15 @@ function databaseRequest(mode, action) {
 }
 
 function selectedProduct() {
-  return PRODUCTS.find(product => product.id === state.productId) || null;
+  const product = PRODUCTS.find(item => item.id === state.productId);
+  return product ? { ...product, attributes: state.attributes || product.attributes } : null;
+}
+
+function ensureAttributes() {
+  if (state.attributes) return state.attributes;
+  const product = PRODUCTS.find(item => item.id === state.productId);
+  state.attributes = structuredClone(product?.attributes || []);
+  return state.attributes;
 }
 
 function escapeHtml(value) {
@@ -187,13 +196,10 @@ function getOptionMapKey(attributeCode, optionCode) {
   return `${attributeCode}::${optionCode}`;
 }
 
-function materialOptions(attribute, option) {
+function materialOptions() {
   const names = state.materials.map(name => ({ code: `GLB:${name}`, label: `GLB · ${name}`, color: colorFromName(name) }));
   const catalog = MATERIAL_CATALOG.map(material => ({ ...material, label: `Catalogo · ${material.label}` }));
-  const all = [...names, ...catalog];
-  const preferred = all.find(material => material.code === option.material);
-  if (preferred) return all;
-  return [{ code: option.material, label: `${option.material} · ${option.label}`, color: option.color }, ...all];
+  return [...names, ...catalog];
 }
 
 function colorFromName(name) {
@@ -275,11 +281,11 @@ function stepComplete(index) {
   if (index === 0) return Boolean(selectedProduct());
   if (!selectedProduct()) return false;
   if (index === 1) return state.glbLoaded && state.meshes.length > 0;
-  if (index === 2) return state.meshes.length > 0 && state.meshes.every(mesh => {
+  if (index === 2) return hasCompleteOptionMappings();
+  if (index === 3) return state.meshes.length > 0 && state.meshes.every(mesh => {
     const mapping = state.meshMap[mesh.id];
     return mapping && (mapping.type === 'fixed' || (mapping.type === 'variable' && mapping.attribute));
   });
-  if (index === 3) return hasCompleteOptionMappings();
   if (index === 4) return state.defaultsApplied && state.testPassed;
   if (index === 5) return Boolean(state.publishedAt);
   return false;
@@ -335,13 +341,13 @@ function renderContext() {
 }
 
 function renderStep() {
-  const renderers = [renderProductStep, renderModelStep, renderMappingStep, renderAppearanceStep, renderTestStep, renderPublishStep];
+  const renderers = [renderProductStep, renderModelStep, renderAttributesStep, renderMappingStep, renderTestStep, renderPublishStep];
   workPanel.innerHTML = renderers[state.currentStep]();
 }
 
 function stepHeader(index, title, description) {
   return `<div class="panel-content">
-    <div class="step-eyebrow"><span class="step-number">${index + 1}</span> Fase ${index + 1} di 6 · ${STEPS[index].title}</div>
+    <div class="step-eyebrow"><span class="step-number">${index + 1}</span> Fase ${index + 1} di ${STEPS.length} · ${STEPS[index].title}</div>
     <h2 class="panel-title">${title}</h2>
     <p class="panel-description">${description}</p>
     <div class="panel-divider"></div>`;
@@ -403,8 +409,8 @@ function renderModelStep() {
 function renderMappingStep() {
   const product = selectedProduct();
   if (!state.meshes.length) {
-    return `${stepHeader(2, 'Classifica e collega le parti del modello', 'Per ogni mesh indica se rimane fissa oppure se varia con una scelta commerciale. Più mesh possono condividere lo stesso attributo.')}
-      <div class="empty-note">Carica prima un GLB nella fase “Modello 3D” per poter classificare le mesh.</div>${stepFooter(1, -1)}`;
+    return `${stepHeader(3, 'Classifica e collega le parti del modello', 'Per ogni mesh indica se rimane fissa oppure se varia con una scelta commerciale. Più mesh possono condividere lo stesso attributo.')}
+      <div class="empty-note">Carica prima un GLB nella fase “Modello 3D” per poter classificare le mesh.</div>${stepFooter(2, -1)}`;
   }
   const rows = state.meshes.map(mesh => {
     const mapping = state.meshMap[mesh.id] || {};
@@ -424,43 +430,51 @@ function renderMappingStep() {
     const mapping = state.meshMap[mesh.id];
     return mapping && (mapping.type === 'fixed' || (mapping.type === 'variable' && mapping.attribute));
   }).length;
-  return `${stepHeader(2, 'Classifica e collega le parti del modello', 'Per ogni mesh indica se rimane fissa oppure se varia con una scelta commerciale. Più mesh possono condividere lo stesso attributo.')}
+  return `${stepHeader(3, 'Classifica e collega le parti del modello', 'Per ogni mesh indica se rimane fissa oppure se varia con una scelta commerciale. Più mesh possono condividere lo stesso attributo.')}
     <div class="info-banner"><span class="info-symbol">i</span><span>Le mesh non classificate generano un avviso; una mesh variabile senza attributo blocca la pubblicazione.</span></div>
     <div class="mapping-list" style="margin-top:14px">${rows}</div>
     <div class="mapping-footer">${classified} di ${state.meshes.length} mesh classificate · ${product.attributes.length} attributi sorgente disponibili</div>
-    ${stepFooter(1, 3)}`;
+    ${stepFooter(2, 4)}`;
 }
 
-function renderAppearanceStep() {
-  const product = selectedProduct();
-  const mappedAttributes = [...new Set(Object.values(state.meshMap).filter(mapping => mapping?.type === 'variable' && mapping.attribute).map(mapping => mapping.attribute))];
-  const groups = mappedAttributes.map(attributeCode => {
-    const attribute = product.attributes.find(item => item.code === attributeCode);
-    if (!attribute) return '';
-    const rows = attribute.options.map(option => {
-      const key = getOptionMapKey(attribute.code, option.code);
-      const mapping = state.optionMap[key] || {};
-      const materials = materialOptions(attribute, option);
-      const options = materials.map(material => `<option value="${escapeHtml(material.code)}" ${mapping.material === material.code ? 'selected' : ''}>${escapeHtml(material.label)}</option>`).join('');
-      return `<div class="option-row">
-        <span class="option-copy"><strong>${escapeHtml(option.label)}</strong><small>${escapeHtml(option.code)}</small></span>
-        <select class="select-input" aria-label="Materiale per ${escapeHtml(option.label)}" data-action="option-material" data-attribute="${escapeHtml(attribute.code)}" data-option="${escapeHtml(option.code)}">
-          <option value="">Associa materiale 3D…</option>${options}
+function renderAttributesStep() {
+  const attributes = selectedProduct().attributes;
+  const materials = materialOptions();
+  const cards = attributes.map((attribute, attributeIndex) => {
+    const rows = attribute.options.map((option, optionIndex) => {
+      const mapping = state.optionMap[getOptionMapKey(attribute.code, option.code)] || {};
+      const materialSelect = materials.map(material => `<option value="${escapeHtml(material.code)}" ${mapping.material === material.code ? 'selected' : ''}>${escapeHtml(material.label)}</option>`).join('');
+      const id = `preview-${attributeIndex}-${optionIndex}`;
+      return `<div class="option-edit-row">
+        <input class="text-input" aria-label="Codice opzione" placeholder="Codice" value="${escapeHtml(option.code)}" data-action="option-code" data-attribute="${attributeIndex}" data-option="${optionIndex}">
+        <input class="text-input" aria-label="Descrizione opzione" placeholder="Descrizione" value="${escapeHtml(option.label)}" data-action="option-label" data-attribute="${attributeIndex}" data-option="${optionIndex}">
+        <select class="select-input" aria-label="Materiale GLB per ${escapeHtml(option.code)}" data-action="option-material" data-attribute="${attributeIndex}" data-option="${optionIndex}">
+          <option value="">Nessun materiale</option>${materialSelect}
         </select>
         <div class="preview-upload">${mapping.previewUrl ? `<img class="preview-thumb" src="${mapping.previewUrl}" alt="Anteprima ${escapeHtml(option.label)}">` : '<span class="preview-thumb" aria-hidden="true"></span>'}
-          <label class="button button-secondary" for="preview-${escapeHtml(attribute.code)}-${escapeHtml(option.code)}">${mapping.previewName ? 'Cambia JPG' : 'Aggiungi JPG'}</label>
-          <input class="file-input-hidden" id="preview-${escapeHtml(attribute.code)}-${escapeHtml(option.code)}" type="file" accept="image/jpeg,.jpg,.jpeg" data-action="option-preview" data-attribute="${escapeHtml(attribute.code)}" data-option="${escapeHtml(option.code)}">
-          <span>${mapping.previewName ? escapeHtml(mapping.previewName) : 'Facoltativo'}</span>
+          <label class="button button-secondary" for="${id}">${mapping.previewName ? 'Cambia JPG' : 'Aggiungi JPG'}</label>
+          <input class="file-input-hidden" id="${id}" type="file" accept="image/jpeg,.jpg,.jpeg" data-action="option-preview" data-attribute="${attributeIndex}" data-option="${optionIndex}">
+          ${mapping.previewUrl ? `<button class="button button-quiet" type="button" data-action="remove-preview" data-attribute="${attributeIndex}" data-option="${optionIndex}" aria-label="Rimuovi JPG">✕</button>` : ''}
         </div>
       </div>`;
     }).join('');
-    return `<div class="option-group"><div class="option-group-head"><strong>${escapeHtml(attribute.label)}</strong><small>${attribute.options.length} opzioni sorgente · ${state.meshes.filter(mesh => state.meshMap[mesh.id]?.attribute === attribute.code).length} mesh collegate</small></div>${rows}</div>`;
+    const defaults = attribute.options.map(option => `<option value="${escapeHtml(option.code)}" ${option.code === attribute.default ? 'selected' : ''}>${escapeHtml(option.code)}</option>`).join('');
+    return `<div class="option-group attribute-card">
+      <div class="attribute-head">
+        <label>Codice attributo<input class="text-input" value="${escapeHtml(attribute.code)}" data-action="attribute-code" data-attribute="${attributeIndex}"></label>
+        <label>Descrizione<input class="text-input" value="${escapeHtml(attribute.label)}" data-action="attribute-label" data-attribute="${attributeIndex}"></label>
+        <label>N. opzioni<input class="text-input" type="number" min="1" max="30" value="${attribute.options.length}" data-action="option-count" data-attribute="${attributeIndex}"></label>
+        <label>Default<select class="select-input" data-action="attribute-default" data-attribute="${attributeIndex}">${defaults}</select></label>
+        <button class="button button-danger" type="button" data-action="remove-attribute" data-attribute="${attributeIndex}">Elimina</button>
+      </div>
+      ${rows}
+    </div>`;
   }).join('');
-  return `${stepHeader(3, 'Associa l’aspetto alle opzioni', 'Per ogni opzione commerciale seleziona il materiale 3D che il viewer applicherà alle mesh collegate. Le anteprime JPG sono facoltative in questo prototipo.')}
-    <div class="info-banner"><span class="info-symbol">i</span><span>Il codice dell’opzione resta quello sorgente. Più opzioni possono condividere lo stesso materiale; l’immagine JPG non sostituisce il materiale 3D.</span></div>
-    ${groups ? `<div class="option-groups" style="margin-top:14px">${groups}</div>` : '<div class="empty-note" style="margin-top:14px">Nessun attributo è ancora collegato a una mesh variabile. Completa la mappatura nella fase precedente.</div>'}
-    <div class="hint" style="margin-top:12px">I materiali del GLB caricato e il catalogo grafico sono selezionabili; il catalogo mostrato è dimostrativo.</div>
-    ${stepFooter(2, 4)}`;
+  return `${stepHeader(2, 'Definisci attributi e opzioni', 'Crea gli attributi configurabili e indica quante opzioni hanno. Per ogni opzione inserisci codice e descrizione, e facoltativamente il materiale del GLB e l’anteprima JPG.')}
+    <div class="info-banner"><span class="info-symbol">i</span><span>${state.materials.length ? `Materiali letti dal GLB: ${state.materials.map(escapeHtml).join(', ')}.` : 'Nessun GLB caricato: sono disponibili solo i materiali del catalogo grafico. Carica il GLB nella fase precedente per collegarne i materiali.'} Il legame materiale è necessario per le opzioni degli attributi collegati a mesh variabili.</span></div>
+    <div class="option-groups" style="margin-top:14px">${cards || '<div class="empty-note">Nessun attributo definito.</div>'}</div>
+    <div style="margin-top:12px"><button class="button button-secondary" type="button" data-action="add-attribute">+ Nuovo attributo</button></div>
+    ${stepFooter(1, 3)}`;
 }
 
 function renderTestStep() {
@@ -571,10 +585,17 @@ async function selectProduct(productId) {
       return;
     }
     state = { ...freshState(), productId, currentStep: 0, dirty: true };
+    ensureAttributes();
     currentHighlightedMesh = null;
     removeLoadedModel();
   }
   render();
+}
+
+function clearGlbMaterialLinks() {
+  for (const mapping of Object.values(state.optionMap)) {
+    if (mapping.material?.startsWith('GLB:')) mapping.material = '';
+  }
 }
 
 function removeLoadedModel() {
@@ -587,7 +608,7 @@ function removeLoadedModel() {
   state.meshes = [];
   state.materials = [];
   state.meshMap = {};
-  state.optionMap = {};
+  clearGlbMaterialLinks();
   state.defaultsApplied = false;
 }
 
@@ -644,7 +665,7 @@ async function handleGlbUpload(file) {
       throw new Error('Nel GLB non sono state trovate mesh con geometria.');
     }
     state.meshMap = {};
-    state.optionMap = {};
+    clearGlbMaterialLinks();
     state.defaultsApplied = false;
     state.testPassed = false;
     state.glbFileName = file.name;
@@ -869,7 +890,7 @@ function applyMaterialToModel(attributeCode, optionCode) {
     const oldMaterials = Array.isArray(object.material) ? object.material : [object.material];
     const nextMaterials = oldMaterials.map(oldMaterial => {
       const material = oldMaterial.clone();
-      material.color.set(color);
+      material.color.set(color || '#9aa5a0');
       return material;
     });
     object.material = Array.isArray(object.material) ? nextMaterials : nextMaterials[0];
@@ -920,6 +941,126 @@ function confirmTest() {
   showToast('Esito del test registrato. Verifica manuale in ambiente demo.');
 }
 
+const CODE_PATTERN = /^[A-Z0-9_-]{1,40}$/;
+
+function normalizeCode(value) {
+  return String(value).trim().toUpperCase().replace(/\s+/g, '_');
+}
+
+function attributesChanged() {
+  markDraftChanged({ invalidateDefault: true, resetTestEvidence: true });
+  render();
+}
+
+function moveOptionMapKeys(oldAttribute, newAttribute, oldOption, newOption) {
+  const prefix = oldOption === undefined ? `${oldAttribute}::` : getOptionMapKey(oldAttribute, oldOption);
+  for (const key of Object.keys(state.optionMap)) {
+    if (oldOption === undefined ? key.startsWith(prefix) : key === prefix) {
+      const optionPart = key.slice(oldAttribute.length + 2);
+      state.optionMap[getOptionMapKey(newAttribute, oldOption === undefined ? optionPart : newOption)] = state.optionMap[key];
+      delete state.optionMap[key];
+    }
+  }
+}
+
+function addAttribute() {
+  const attributes = ensureAttributes();
+  let number = attributes.length + 1;
+  while (attributes.some(attribute => attribute.code === `ATTR_${number}`)) number += 1;
+  const code = `ATTR_${number}`;
+  attributes.push({ code, label: `Attributo ${number}`, default: `${code}_1`, options: [{ code: `${code}_1`, label: 'Opzione 1' }] });
+  attributesChanged();
+}
+
+function removeAttribute(index) {
+  const attributes = ensureAttributes();
+  const attribute = attributes[index];
+  if (!attribute || !window.confirm(`Eliminare l’attributo ${attribute.code} e le sue opzioni?`)) return;
+  attributes.splice(index, 1);
+  for (const key of Object.keys(state.optionMap)) if (key.startsWith(`${attribute.code}::`)) delete state.optionMap[key];
+  for (const mapping of Object.values(state.meshMap)) if (mapping?.attribute === attribute.code) mapping.attribute = '';
+  attributesChanged();
+}
+
+function handleAttributeEdit(target) {
+  const attributes = ensureAttributes();
+  const attribute = attributes[Number(target.dataset.attribute)];
+  const optionIndex = Number(target.dataset.option);
+  const option = attribute?.options[optionIndex];
+  if (!attribute) return;
+  const action = target.dataset.action;
+  if (action === 'attribute-label') {
+    attribute.label = target.value.trim() || attribute.code;
+  } else if (action === 'attribute-code') {
+    const code = normalizeCode(target.value);
+    if (!CODE_PATTERN.test(code) || attributes.some(item => item !== attribute && item.code === code)) {
+      showToast('Codice attributo non valido o già in uso (lettere, numeri, _ e -).', true);
+      render();
+      return;
+    }
+    moveOptionMapKeys(attribute.code, code);
+    for (const mapping of Object.values(state.meshMap)) if (mapping?.attribute === attribute.code) mapping.attribute = code;
+    attribute.code = code;
+  } else if (action === 'attribute-default') {
+    attribute.default = target.value;
+  } else if (action === 'option-count') {
+    const count = Math.min(30, Math.max(1, Math.floor(Number(target.value)) || 1));
+    if (count < attribute.options.length && attribute.options.slice(count).some(item => item.label.trim()) && !window.confirm(`Verranno rimosse ${attribute.options.length - count} opzioni. Continuare?`)) {
+      render();
+      return;
+    }
+    while (attribute.options.length > count) {
+      const removed = attribute.options.pop();
+      delete state.optionMap[getOptionMapKey(attribute.code, removed.code)];
+    }
+    while (attribute.options.length < count) {
+      let number = attribute.options.length + 1;
+      while (attribute.options.some(item => item.code === `${attribute.code}_${number}`)) number += 1;
+      attribute.options.push({ code: `${attribute.code}_${number}`, label: `Opzione ${number}` });
+    }
+    if (!attribute.options.some(item => item.code === attribute.default)) attribute.default = attribute.options[0].code;
+  } else if (!option) {
+    return;
+  } else if (action === 'option-code') {
+    const code = normalizeCode(target.value);
+    if (!CODE_PATTERN.test(code) || attribute.options.some(item => item !== option && item.code === code)) {
+      showToast('Codice opzione non valido o già in uso nell’attributo.', true);
+      render();
+      return;
+    }
+    moveOptionMapKeys(attribute.code, attribute.code, option.code, code);
+    if (attribute.default === option.code) attribute.default = code;
+    option.code = code;
+  } else if (action === 'option-label') {
+    option.label = target.value.trim() || option.code;
+  } else if (action === 'option-material') {
+    const key = getOptionMapKey(attribute.code, option.code);
+    state.optionMap[key] = { ...state.optionMap[key], material: target.value };
+  } else if (action === 'option-preview') {
+    const file = target.files?.[0];
+    if (!file) return;
+    if (!['image/jpeg', 'image/jpg'].includes(file.type) && !/\.jpe?g$/i.test(file.name)) {
+      showToast('Carica un’immagine JPG o JPEG.', true);
+      return;
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      showToast('L’anteprima JPG deve essere inferiore a 2 MB.', true);
+      return;
+    }
+    const reader = new FileReader();
+    reader.onerror = () => showToast('Impossibile leggere il file JPG.', true);
+    reader.onload = () => {
+      const key = getOptionMapKey(attribute.code, option.code);
+      state.optionMap[key] = { ...state.optionMap[key], previewName: file.name, previewUrl: reader.result };
+      markDraftChanged();
+      render();
+    };
+    reader.readAsDataURL(file);
+    return;
+  }
+  attributesChanged();
+}
+
 function validateConfiguration() {
   const product = selectedProduct();
   if (!product) return [{ level: 'blocking', title: 'Prodotto sorgente', detail: 'Seleziona un prodotto MIO/Pigreco valido nella prima fase.' }];
@@ -939,6 +1080,10 @@ function validateConfiguration() {
       ? { level: 'blocking', title: 'Mappatura mesh → attributo', detail: `${missingAttributes.map(mesh => mesh.name).join(', ')}: associa un attributo sorgente valido.` }
       : { level: 'success', title: 'Mappatura mesh → attributo', detail: 'Ogni mesh variabile è collegata a un attributo configurabile.' });
   }
+  const emptyAttributes = product.attributes.filter(attribute => !attribute.options.length);
+  checks.push(!product.attributes.length || emptyAttributes.length
+    ? { level: 'blocking', title: 'Attributi e opzioni definiti', detail: 'Definisci almeno un attributo e almeno un’opzione per ogni attributo.' }
+    : { level: 'success', title: 'Attributi e opzioni definiti', detail: `${product.attributes.length} attributi, ${product.attributes.reduce((total, attribute) => total + attribute.options.length, 0)} opzioni.` });
   const activeAttributes = new Set(state.meshes.filter(mesh => state.meshMap[mesh.id]?.type === 'variable').map(mesh => state.meshMap[mesh.id]?.attribute).filter(Boolean));
   const unmappedOptions = [];
   for (const attributeCode of activeAttributes) {
@@ -1045,6 +1190,19 @@ document.addEventListener('click', event => {
   if (action === 'confirm-test') confirmTest();
   if (action === 'publish') publishConfiguration();
   if (action === 'highlight-mesh') highlightMesh(target.dataset.mesh);
+  if (action === 'add-attribute') addAttribute();
+  if (action === 'remove-attribute') removeAttribute(Number(target.dataset.attribute));
+  if (action === 'remove-preview') {
+    const attribute = ensureAttributes()[Number(target.dataset.attribute)];
+    const option = attribute?.options[Number(target.dataset.option)];
+    const mapping = option && state.optionMap[getOptionMapKey(attribute.code, option.code)];
+    if (mapping) {
+      delete mapping.previewUrl;
+      delete mapping.previewName;
+    }
+    markDraftChanged();
+    render();
+  }
 });
 
 document.addEventListener('change', event => {
@@ -1061,32 +1219,7 @@ document.addEventListener('change', event => {
     state.meshMap[meshId] = { ...state.meshMap[meshId], attribute: target.value };
     setDirty();
   }
-  if (action === 'option-material') {
-    const key = getOptionMapKey(target.dataset.attribute, target.dataset.option);
-    state.optionMap[key] = { ...state.optionMap[key], material: target.value };
-    markDraftChanged({ invalidateDefault: true, resetTestEvidence: true });
-    render();
-  }
-  if (action === 'option-preview' && target.files?.[0]) {
-    const file = target.files[0];
-    if (!['image/jpeg', 'image/jpg'].includes(file.type) && !/\.jpe?g$/i.test(file.name)) {
-      showToast('Carica un’immagine JPG o JPEG.', true);
-      return;
-    }
-    if (file.size > 2 * 1024 * 1024) {
-      showToast('L’anteprima JPG deve essere inferiore a 2 MB.', true);
-      return;
-    }
-    const reader = new FileReader();
-    reader.onerror = () => showToast('Impossibile leggere il file JPG.', true);
-    reader.onload = () => {
-      const key = getOptionMapKey(target.dataset.attribute, target.dataset.option);
-      state.optionMap[key] = { ...state.optionMap[key], previewName: file.name, previewUrl: reader.result };
-      markDraftChanged();
-      render();
-    };
-    reader.readAsDataURL(file);
-  }
+  if (action?.startsWith('attribute-') || action?.startsWith('option-')) handleAttributeEdit(target);
   if (action === 'test-option') updateTestSelection(target.dataset.attribute, target.value);
   if (action === 'test-check') {
     state.testChecks[target.dataset.check] = target.checked;

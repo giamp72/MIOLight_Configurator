@@ -12,8 +12,8 @@ Il prototipo usa dati dimostrativi: la ricerca prodotti, le opzioni compatibili 
 
 1. Seleziona un prodotto già presente nell'anagrafica dimostrativa.
 2. Carica un file GLB e controlla le mesh nel visualizzatore.
-3. Classifica ogni mesh come fissa o variabile e, se necessario, collegala a un attributo.
-4. Associa materiali e anteprime JPG alle opzioni commerciali.
+3. Definisci gli attributi, il numero di opzioni e, per ogni opzione, codice, descrizione, materiale del GLB (facoltativo) e anteprima JPG.
+4. Classifica ogni mesh come fissa o variabile e collegala a un attributo.
 5. Applica i default sorgente e conferma i controlli manuali del test.
 6. Esamina gli errori bloccanti e pubblica la configurazione.
 

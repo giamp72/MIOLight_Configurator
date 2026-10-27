@@ -226,7 +226,7 @@ async function viewProdotto(idParam) {
 
   let prodotto = { nome: '', descrizione: '', attivo: true };
   let misure = [], assegnati = [], configs = [], tuttiAttributi = [], opzioniPerAttr = [];
-  let meshRows = [], meshMapping = {}, meshCompatible = true, previewOptionsByAttr = {}, meshMappingsByPath = {};
+  let meshRows = [], meshMappingsById = {}, previewOptionsByAttr = {};
   if (!isNew) {
     const [p, m, pa, cf, attrs] = await Promise.all([
       q(sb.from('prodotti').select('*').eq('id_prodotto', id).maybeSingle()),
@@ -250,19 +250,8 @@ async function viewProdotto(idParam) {
         q(sb.from('mesh_glb').select('id_mesh, id_glb, nome_mesh, percorso_nodo, indice_mesh, materiale_base').in('id_glb', glbIds)),
         q(sb.from('associazioni_mesh').select('id_mesh, id_attributo, ruolo').eq('id_prodotto', id)),
       ]);
-      const pathsByGlb = glbIds.map((glbId) => allMeshes.filter((mesh) => mesh.id_glb === glbId)
-        .map((mesh) => mesh.percorso_nodo).sort());
-      meshCompatible = pathsByGlb.every((paths) => JSON.stringify(paths) === JSON.stringify(pathsByGlb[0]));
-      const firstGlb = glbIds[0];
-      meshRows = allMeshes.filter((mesh) => mesh.id_glb === firstGlb)
-        .sort((a, b) => a.percorso_nodo.localeCompare(b.percorso_nodo));
-      meshRows.forEach((mesh) => {
-        const matchingMeshIds = allMeshes.filter((candidate) => candidate.percorso_nodo === mesh.percorso_nodo)
-          .map((candidate) => candidate.id_mesh);
-        const mapping = allMappings.find((candidate) => matchingMeshIds.includes(candidate.id_mesh));
-        meshMapping[mesh.percorso_nodo] = mapping?.id_attributo || '';
-        if (mapping) meshMappingsByPath[mesh.percorso_nodo] = mapping.id_attributo;
-      });
+      meshRows = allMeshes;
+      allMappings.forEach((mapping) => { meshMappingsById[mapping.id_mesh] = mapping.id_attributo; });
     }
   }
 
@@ -272,7 +261,7 @@ async function viewProdotto(idParam) {
       <td><input type="number" step="any" data-f="dim_z" value="${esc(m?.dim_z)}" aria-label="Profondità"></td>
       <td><select data-f="unita_misura">${['cm', 'mm'].map((u) => `<option ${((m?.unita_misura) || 'cm') === u ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
       <td>${m?.risorse_glb ? `<span class="chip">${esc(m.risorse_glb.nome_file)}</span>` : '<span class="muted">Nessun GLB</span>'}
-        ${m ? '<input type="file" data-f="glb" accept=".glb,model/gltf-binary" aria-label="File GLB"><button class="small" data-act="upload-glb">Carica GLB</button>' : ''}</td>
+        ${m ? `<label class="upload-button small">Carica GLB<input type="file" data-f="glb" accept=".glb,model/gltf-binary" aria-label="Carica GLB oggetto"></label><span class="upload-status muted" data-upload-status></span>` : ''}</td>
       <td class="actions">${m
         ? `${m.id_glb ? '<button class="small danger" data-act="clear-glb">Rimuovi GLB</button> ' : ''}<button class="small" data-act="save">Salva</button> <button class="small danger" data-act="del">Elimina</button>`
         : '<button class="small primary" data-act="add">Aggiungi</button>'}</td></tr>`;
@@ -294,7 +283,39 @@ async function viewProdotto(idParam) {
 
   const assegnabili = tuttiAttributi.filter((a) => a.attivo && !assegnati.some((x) => x.id_attributo === a.id_attributo));
   const previewMeasures = misure.filter((measure) => measure.id_glb && measure.risorse_glb?.percorso_risorsa);
-  const previewAttributeIds = [...new Set(Object.values(meshMappingsByPath))];
+  const meshesForMeasure = (measureId) => {
+    const measure = previewMeasures.find((item) => String(item.id_misura) === String(measureId));
+    return measure ? meshRows.filter((mesh) => mesh.id_glb === measure.id_glb)
+      .sort((a, b) => a.percorso_nodo.localeCompare(b.percorso_nodo)) : [];
+  };
+  const mappedAttributeIds = (measureId) => [...new Set(meshesForMeasure(measureId)
+    .map((mesh) => meshMappingsById[mesh.id_mesh]).filter(Boolean))];
+  const meshMappingSection = () => {
+    if (!previewMeasures.length) return '<p class="empty">Associa prima un GLB a una misura.</p>';
+    const selectedId = String(previewMeasures[0].id_misura);
+    const rows = meshesForMeasure(selectedId);
+    return `<label for="mapping-measure">Misura / GLB</label>
+      <select id="mapping-measure">${previewMeasures.map((measure) => `<option value="${measure.id_misura}">${esc(measure.dim_x)} × ${esc(measure.dim_y)} × ${esc(measure.dim_z)} ${esc(measure.unita_misura)} · ${esc(measure.risorse_glb.nome_file)}</option>`).join('')}</select>
+      <div id="mesh-map-rows">${rows.length ? `<div class="table-scroll"><table><thead><tr><th>Mesh</th><th>Percorso</th><th>Materiale originale</th><th>Attributo</th></tr></thead><tbody>
+        ${rows.map((mesh) => `<tr data-mesh-id="${mesh.id_mesh}"><td>${esc(mesh.nome_mesh)}</td><td><code>${esc(mesh.percorso_nodo)}</code></td><td>${esc(mesh.materiale_base || '—')}</td>
+          <td><select data-mesh-map><option value="">— non mappata —</option>${assegnati.map((pa) => `<option value="${pa.id_attributo}" ${String(meshMappingsById[mesh.id_mesh] || '') === String(pa.id_attributo) ? 'selected' : ''}>${esc(pa.attributi.nome)} (${esc(pa.attributi.tipo_attributo)})</option>`).join('')}</select></td></tr>`).join('')}
+        </tbody></table></div>` : '<p class="empty">Nessuna mesh nel GLB di questa misura.</p>'}
+        <button class="primary" id="save-mesh-map">Salva mappatura di questa misura</button></div>`;
+  };
+  const previewAttributesMarkup = (measureId) => {
+    const attributeIds = mappedAttributeIds(measureId);
+    if (!attributeIds.length) return '<p class="muted">Nessun attributo mappato su questo GLB.</p>';
+    return attributeIds.map((attributeId) => {
+      const attribute = assegnati.find((item) => item.id_attributo === attributeId);
+      if (!attribute) return '';
+      const allowedIds = new Set(configs.filter((config) => config.id_attributo === attributeId).map((config) => config.id_opzione));
+      const options = (previewOptionsByAttr[attributeId] || []).filter((option) => allowedIds.has(option.id_opzione));
+      return `<div class="field"><label for="preview-attr-${attributeId}">${esc(attribute.attributi.nome)}</label>
+        <select id="preview-attr-${attributeId}" data-preview-attribute="${attributeId}">
+          <option value="">— seleziona —</option>${options.map((option) => `<option value="${option.id_opzione}" ${String(option.id_opzione) === String(attribute.id_opzione_default || '') ? 'selected' : ''}>${esc(option.nome)}</option>`).join('')}
+        </select></div>`;
+    }).join('');
+  };
 
   shell(`
     <div class="page-head"><div><h1>${isNew ? 'Nuovo prodotto' : esc(prodotto.nome)}</h1>
@@ -308,7 +329,7 @@ async function viewProdotto(idParam) {
     </form>
     ${isNew ? '<p class="muted">Dopo la creazione potrai definire misure e attributi.</p>' : `
     <section class="card"><h2>Misure e GLB (terne larghezza / altezza / profondità)</h2>
-      <p class="muted">Ogni terna può avere un GLB dedicato. I GLB dello stesso prodotto devono contenere le stesse mesh.</p>
+      <p class="muted">Ogni terna può avere un GLB indipendente, con mesh e mappatura attributi proprie.</p>
       <div class="table-scroll"><table><thead><tr><th>Larghezza</th><th>Altezza</th><th>Profondità</th><th>Unità</th><th>GLB oggetto</th><th></th></tr></thead>
       <tbody id="misure">${misure.map(misuraRow).join('')}${misuraRow(null)}</tbody></table></div></section>
     <section class="card"><h2>Attributi del prodotto</h2>
@@ -317,35 +338,18 @@ async function viewProdotto(idParam) {
         <option value="">— seleziona —</option>${assegnabili.map((a) => `<option value="${a.id_attributo}">${esc(a.nome)} (${esc(a.tipo_attributo)})</option>`).join('')}</select></div>
         <div class="shrink"><button id="add-attr">Assegna</button></div></div></section>
     <section class="card"><h2>Mappatura mesh</h2>
-      <p class="muted">La mappatura è condivisa da tutte le misure e viene replicata sui GLB associati.</p>
-      ${!misure.some((misura) => misura.id_glb) ? '<p class="empty">Associa prima un GLB a una misura.</p>' : !meshCompatible
-        ? '<p class="notice">I GLB associati non hanno le stesse mesh. Correggi i file prima di salvare la mappatura.</p>'
-        : meshRows.length ? `<div class="table-scroll"><table><thead><tr><th>Mesh</th><th>Percorso</th><th>Materiale originale</th><th>Attributo</th></tr></thead><tbody>
-          ${meshRows.map((mesh, index) => `<tr><td>${esc(mesh.nome_mesh)}</td><td><code>${esc(mesh.percorso_nodo)}</code></td><td>${esc(mesh.materiale_base || '—')}</td>
-            <td><select data-mesh-map="${index}"><option value="">— non mappata —</option>${assegnati.map((pa) => `<option value="${pa.id_attributo}" ${String(meshMapping[mesh.percorso_nodo]) === String(pa.id_attributo) ? 'selected' : ''}>${esc(pa.attributi.nome)} (${esc(pa.attributi.tipo_attributo)})</option>`).join('')}</select></td></tr>`).join('')}
-          </tbody></table></div><button class="primary" id="save-mesh-map">Salva mappatura</button>`
-        : '<p class="empty">Nessuna mesh disponibile nei GLB associati.</p>'}</section>
+      <p class="muted">Ogni GLB ha la propria mappatura, indipendente dagli altri GLB del prodotto.</p>
+      ${meshMappingSection()}</section>
     <section class="card"><h2>Prova configurazione</h2>
       <p class="muted">Seleziona gli attributi e verifica in anteprima il materiale applicato alle mesh del GLB.</p>
-      ${previewMeasures.length && previewAttributeIds.length ? `<div class="product-preview-grid">
+      ${previewMeasures.length ? `<div class="product-preview-grid">
         <div><label for="preview-measure">Modello per misura</label>
           <select id="preview-measure">${previewMeasures.map((measure) => `<option value="${measure.id_misura}">${esc(measure.dim_x)} × ${esc(measure.dim_y)} × ${esc(measure.dim_z)} ${esc(measure.unita_misura)}</option>`).join('')}</select>
           <div class="product-preview-stage" id="productPreview"></div>
           <p class="preview-status muted" id="preview-status" role="status">Caricamento del modello…</p>
         </div>
-        <div class="preview-attributes"><h3>Attributi</h3>
-          ${previewAttributeIds.map((attributeId) => {
-            const attribute = assegnati.find((item) => item.id_attributo === attributeId);
-            if (!attribute) return '';
-            const allowedIds = new Set(configs.filter((config) => config.id_attributo === attributeId).map((config) => config.id_opzione));
-            const options = (previewOptionsByAttr[attributeId] || []).filter((option) => allowedIds.has(option.id_opzione));
-            return `<div class="field"><label for="preview-attr-${attributeId}">${esc(attribute.attributi.nome)}</label>
-              <select id="preview-attr-${attributeId}" data-preview-attribute="${attributeId}">
-                <option value="">— seleziona —</option>${options.map((option) => `<option value="${option.id_opzione}" ${String(option.id_opzione) === String(attribute.id_opzione_default || '') ? 'selected' : ''}>${esc(option.nome)}</option>`).join('')}
-              </select></div>`;
-          }).join('')}
-        </div></div>`
-      : '<p class="empty">Associa un GLB a una misura e mappa almeno una mesh a un attributo per avviare la prova.</p>'}</section>`}`,
+        <div class="preview-attributes"><h3>Attributi del GLB</h3><div id="preview-attributes">${previewAttributesMarkup(previewMeasures[0].id_misura)}</div></div></div>`
+      : '<p class="empty">Associa un GLB a una misura per avviare la prova.</p>'}</section>`}`,
     [['Anagrafica prodotti', '#/prodotti'], [isNew ? 'Nuovo prodotto' : `Prodotto ${id}`]]);
 
   $('#form-prodotto').onsubmit = async (e) => {
@@ -366,44 +370,43 @@ async function viewProdotto(idParam) {
 
   const reload = () => viewProdotto(String(id));
 
+  const uploadMeasureGlb = async (input) => {
+    const file = input.files[0];
+    if (!file) return;
+    const tr = input.closest('tr');
+    const mid = tr.dataset.misura;
+    const status = $('[data-upload-status]', tr);
+    input.disabled = true;
+    status.textContent = 'Caricamento…';
+    const uploaded = await act(async () => {
+      const resource = await uploadGlbResource(file, 'Oggetto', `${id}/oggetti/${mid}`);
+      try {
+        await q(sb.from('misure').update({ id_glb: resource.id_glb }).eq('id_misura', mid));
+      } catch (error) {
+        const { error: resourceCleanupError } = await sb.from('risorse_glb').delete().eq('id_glb', resource.id_glb);
+        const { error: storageCleanupError } = await sb.storage.from('modelli-glb').remove([resource.path]);
+        const cleanupErrors = [resourceCleanupError, storageCleanupError].filter(Boolean).map(errMsg);
+        if (cleanupErrors.length) throw new Error(`${errMsg(error)} (pulizia non riuscita: ${cleanupErrors.join('; ')})`);
+        throw error;
+      }
+    }, 'GLB caricato e associato alla misura');
+    if (uploaded) reload();
+    else {
+      input.disabled = false;
+      input.value = '';
+      status.textContent = '';
+    }
+  };
+
+  $('#misure').addEventListener('change', (e) => {
+    if (e.target.matches('[data-f=glb]')) uploadMeasureGlb(e.target);
+  });
+
   $('#misure').onclick = async (e) => {
     const action = e.target.dataset.act;
     if (!action) return;
     const tr = e.target.closest('tr');
     const mid = tr.dataset.misura;
-    if (action === 'upload-glb') {
-      const file = $('[data-f=glb]', tr).files[0];
-      if (!file) return toast('Seleziona prima il GLB da caricare.', true);
-      const otherGlbIds = [...new Set(misure.filter((measure) => String(measure.id_misura) !== mid && measure.id_glb).map((measure) => measure.id_glb))];
-      if (otherGlbIds.length) {
-        try {
-          const existingMeshes = await q(sb.from('mesh_glb').select('id_glb, percorso_nodo').in('id_glb', otherGlbIds));
-          const existingPaths = otherGlbIds.map((glbId) => existingMeshes.filter((mesh) => mesh.id_glb === glbId)
-            .map((mesh) => mesh.percorso_nodo).sort());
-          const reference = JSON.stringify(existingPaths[0]);
-          if (existingPaths.some((paths) => JSON.stringify(paths) !== reference)) {
-            return toast('I GLB già associati al prodotto non hanno le stesse mesh. Correggili prima di aggiungerne altri.', true);
-          }
-          const nextPaths = parseGlbMeshes(await file.arrayBuffer()).map((mesh) => mesh.percorso_nodo).sort();
-          if (reference !== JSON.stringify(nextPaths)) {
-            return toast('Il GLB deve contenere le stesse mesh degli altri modelli associati al prodotto.', true);
-          }
-        } catch (error) { return toast(errMsg(error), true); }
-      }
-      if (await act(async () => {
-        const uploaded = await uploadGlbResource(file, 'Oggetto', `${id}/oggetti/${mid}`);
-        try {
-          await q(sb.from('misure').update({ id_glb: uploaded.id_glb }).eq('id_misura', mid));
-        } catch (error) {
-          const { error: resourceCleanupError } = await sb.from('risorse_glb').delete().eq('id_glb', uploaded.id_glb);
-          const { error: storageCleanupError } = await sb.storage.from('modelli-glb').remove([uploaded.path]);
-          const cleanupErrors = [resourceCleanupError, storageCleanupError].filter(Boolean).map(errMsg);
-          if (cleanupErrors.length) throw new Error(`${errMsg(error)} (pulizia non riuscita: ${cleanupErrors.join('; ')})`);
-          throw error;
-        }
-      }, 'GLB caricato e associato alla misura')) reload();
-      return;
-    }
     if (action === 'clear-glb') {
       if (!confirm('Rimuovere il GLB associato a questa misura?')) return;
       if (await act(() => q(sb.from('misure').update({ id_glb: null }).eq('id_misura', mid)), 'Associazione GLB rimossa')) reload();
@@ -420,23 +423,42 @@ async function viewProdotto(idParam) {
     if (await act(() => q(op), 'Misura salvata')) reload();
   };
 
-  $('#save-mesh-map')?.addEventListener('click', async () => {
+  const saveMeshMapping = async (measureId, container) => {
+    const measure = previewMeasures.find((item) => String(item.id_misura) === String(measureId));
+    if (!measure) return;
+    const meshes = meshesForMeasure(measureId);
+    const selected = [...container.querySelectorAll('[data-mesh-map]')].map((select) => {
+      const meshId = Number(select.closest('[data-mesh-id]').dataset.meshId);
+      const attributeId = num(select.value);
+      const attribute = assegnati.find((item) => item.id_attributo === attributeId);
+      if (!attributeId) return null;
+      if (!attribute) throw new Error('Un attributo selezionato non è più assegnato al prodotto.');
+      return { id_prodotto: id, id_mesh: meshId, id_attributo: attributeId, ruolo: attribute.attributi.tipo_attributo };
+    }).filter(Boolean);
     if (await act(async () => {
-      const ids = [...new Set(misure.map((measure) => measure.id_glb).filter(Boolean))];
-      const targetMeshes = await q(sb.from('mesh_glb').select('id_mesh, id_glb, percorso_nodo').in('id_glb', ids));
-      const selected = meshRows.map((mesh, index) => {
-        const attributeId = num($(`[data-mesh-map="${index}"]`).value);
-        const attribute = assegnati.find((item) => item.id_attributo === attributeId);
-        if (!attributeId) return [];
-        if (!attribute) throw new Error('Un attributo selezionato non è più assegnato al prodotto.');
-        return targetMeshes.filter((target) => target.percorso_nodo === mesh.percorso_nodo)
-          .map((target) => ({ id_prodotto: id, id_mesh: target.id_mesh, id_attributo: attributeId, ruolo: attribute.attributi.tipo_attributo }));
-      }).flat();
-      const meshIds = targetMeshes.map((mesh) => mesh.id_mesh);
+      const meshIds = meshes.map((mesh) => mesh.id_mesh);
       if (meshIds.length) await q(sb.from('associazioni_mesh').delete().eq('id_prodotto', id).in('id_mesh', meshIds));
       if (selected.length) await q(sb.from('associazioni_mesh').insert(selected));
-    }, 'Mappatura mesh salvata')) reload();
-  });
+    }, 'Mappatura della misura salvata')) reload();
+  };
+
+  const bindMeshMapping = () => {
+    const selector = $('#mapping-measure');
+    const container = $('#mesh-map-rows');
+    if (!selector || !container) return;
+    const draw = () => {
+      const rows = meshesForMeasure(selector.value);
+      container.innerHTML = `${rows.length ? `<div class="table-scroll"><table><thead><tr><th>Mesh</th><th>Percorso</th><th>Materiale originale</th><th>Attributo</th></tr></thead><tbody>
+        ${rows.map((mesh) => `<tr data-mesh-id="${mesh.id_mesh}"><td>${esc(mesh.nome_mesh)}</td><td><code>${esc(mesh.percorso_nodo)}</code></td><td>${esc(mesh.materiale_base || '—')}</td>
+          <td><select data-mesh-map><option value="">— non mappata —</option>${assegnati.map((pa) => `<option value="${pa.id_attributo}" ${String(meshMappingsById[mesh.id_mesh] || '') === String(pa.id_attributo) ? 'selected' : ''}>${esc(pa.attributi.nome)} (${esc(pa.attributi.tipo_attributo)})</option>`).join('')}</select></td></tr>`).join('')}
+        </tbody></table></div>` : '<p class="empty">Nessuna mesh nel GLB di questa misura.</p>'}
+        <button class="primary" id="save-mesh-map">Salva mappatura di questa misura</button>`;
+      $('#save-mesh-map', container).onclick = () => saveMeshMapping(selector.value, container);
+    };
+    selector.onchange = draw;
+    draw();
+  };
+  bindMeshMapping();
 
   $('#add-attr').onclick = async () => {
     const aid = num($('#nuovo-attr').value);
@@ -480,7 +502,7 @@ async function viewProdotto(idParam) {
     };
   });
 
-  if (previewMeasures.length && previewAttributeIds.length) {
+  if (previewMeasures.length) {
     const stage = $('#productPreview');
     const status = $('#preview-status');
     const measureSelect = $('#preview-measure');
@@ -509,8 +531,9 @@ async function viewProdotto(idParam) {
       const revision = ++applyRevision;
       const messages = [];
       const entries = [];
-      for (const mesh of meshRows) {
-        const attributeId = meshMappingsByPath[mesh.percorso_nodo];
+      const measureId = measureSelect.value;
+      for (const mesh of meshesForMeasure(measureId)) {
+        const attributeId = meshMappingsById[mesh.id_mesh];
         if (!attributeId) continue;
         const option = optionFor(attributeId);
         if (!option) continue;
@@ -550,6 +573,8 @@ async function viewProdotto(idParam) {
         }
         await previewViewer.loadProduct(url);
         if (previewToken !== productPreviewToken) return;
+        $('#preview-attributes').innerHTML = previewAttributesMarkup(selectedMeasure.id_misura);
+        bindPreviewAttributes();
         await applyPreview();
       } catch (error) {
         status.textContent = `Impossibile caricare l’anteprima: ${errMsg(error)}`;
@@ -558,15 +583,18 @@ async function viewProdotto(idParam) {
         measureSelect.disabled = false;
       }
     };
-    measureSelect.onchange = loadSelectedMeasure;
-    $$('[data-preview-attribute]').forEach((select) => {
-      select.onchange = () => {
+    const bindPreviewAttributes = () => {
+      $$('[data-preview-attribute]', $('#preview-attributes')).forEach((select) => {
+        select.onchange = () => {
         applyPreview().catch((error) => {
           status.textContent = `Impossibile aggiornare l’anteprima: ${errMsg(error)}`;
           status.classList.add('error-text');
         });
-      };
-    });
+        };
+      });
+    };
+    measureSelect.onchange = loadSelectedMeasure;
+    bindPreviewAttributes();
     loadSelectedMeasure();
   }
 }
@@ -762,7 +790,8 @@ async function viewMateriali(idParam) {
     <td><input data-f="descrizione" value="${esc(material?.descrizione)}" placeholder="Descrizione" aria-label="Descrizione"></td>
     <td><input data-f="rif" maxlength="200" value="${esc(material?.rif_materiale_interno)}" placeholder="Riferimento interno" aria-label="Riferimento interno"></td>
     <td><select data-f="glb" aria-label="GLB del materiale">${resourceOptions(material?.id_glb)}</select>
-      <input type="file" data-f="file" accept=".glb,model/gltf-binary" aria-label="Carica GLB materiale"></td>
+      <label class="upload-button small">Carica GLB<input type="file" data-f="file" accept=".glb,model/gltf-binary" aria-label="Carica GLB materiale"></label>
+      <span class="upload-status muted" data-upload-status></span></td>
     <td class="actions"><button class="small primary" data-act="save">${material ? 'Salva' : 'Crea'}</button>
       ${material ? `<button class="small danger" data-act="delete">Elimina</button>` : ''}</td></tr>`;
 
@@ -773,6 +802,49 @@ async function viewMateriali(idParam) {
       <tbody id="materials">${materiali.map(materialRow).join('')}${isNew ? materialRow(null) : ''}</tbody></table></section>
     <p class="muted">Il file caricato viene archiviato in Supabase Storage; il GLB può essere sostituito scegliendone uno nuovo oppure rimosso selezionando “nessun GLB”.</p>`,
   [['Anagrafica materiali']]);
+
+  const uploadMaterialGlb = async (input) => {
+    const row = input.closest('tr');
+    const materialId = row.dataset.material;
+    const nome = $('[data-f=nome]', row).value.trim();
+    if (!nome) {
+      input.value = '';
+      return toast('Inserisci prima il nome del materiale.', true);
+    }
+    const file = input.files[0];
+    if (!file) return;
+    const status = $('[data-upload-status]', row);
+    input.disabled = true;
+    status.textContent = 'Caricamento…';
+    const result = await act(async () => {
+      const uploaded = await uploadGlbResource(file, 'Materiale', `materiali/${materialId === 'new' ? crypto.randomUUID() : materialId}`);
+      const rec = {
+        nome,
+        descrizione: $('[data-f=descrizione]', row).value.trim() || null,
+        rif_materiale_interno: $('[data-f=rif]', row).value.trim() || null,
+        id_glb: uploaded.id_glb,
+      };
+      try {
+        if (materialId === 'new') await q(sb.from('materiali').insert(rec));
+        else await q(sb.from('materiali').update(rec).eq('id_materiale', materialId));
+      } catch (error) {
+        const { error: resourceCleanupError } = await sb.from('risorse_glb').delete().eq('id_glb', uploaded.id_glb);
+        const { error: storageCleanupError } = await sb.storage.from('modelli-glb').remove([uploaded.path]);
+        const cleanupErrors = [resourceCleanupError, storageCleanupError].filter(Boolean).map(errMsg);
+        if (cleanupErrors.length) throw new Error(`${errMsg(error)} (pulizia non riuscita: ${cleanupErrors.join('; ')})`);
+        throw error;
+      }
+    }, materialId === 'new' ? 'Materiale creato e GLB caricato' : 'Materiale aggiornato con il nuovo GLB');
+    if (result) viewMateriali();
+    else {
+      input.disabled = false;
+      input.value = '';
+      status.textContent = '';
+    }
+  };
+  $('#materials').addEventListener('change', (event) => {
+    if (event.target.matches('[data-f=file]')) uploadMaterialGlb(event.target);
+  });
 
   $('#materials').onclick = async (event) => {
     const action = event.target.dataset.act;
@@ -788,32 +860,6 @@ async function viewMateriali(idParam) {
 
     const nome = $('[data-f=nome]', row).value.trim();
     if (!nome) return toast('Il nome del materiale è obbligatorio.', true);
-    const file = $('[data-f=file]', row).files[0];
-    if (file) {
-      let uploaded;
-      try {
-        uploaded = await uploadGlbResource(file, 'Materiale', `materiali/${materialId === 'new' ? crypto.randomUUID() : materialId}`);
-      } catch (error) { return toast(errMsg(error), true); }
-      const resourceId = uploaded.id_glb;
-      const rec = {
-        nome,
-        descrizione: $('[data-f=descrizione]', row).value.trim() || null,
-        rif_materiale_interno: $('[data-f=rif]', row).value.trim() || null,
-        id_glb: resourceId,
-      };
-      try {
-        if (materialId === 'new') await q(sb.from('materiali').insert(rec));
-        else await q(sb.from('materiali').update(rec).eq('id_materiale', materialId));
-        toast(materialId === 'new' ? 'Materiale creato' : 'Materiale salvato');
-        return viewMateriali();
-      } catch (error) {
-        const { error: resourceCleanupError } = await sb.from('risorse_glb').delete().eq('id_glb', resourceId);
-        const { error: storageCleanupError } = await sb.storage.from('modelli-glb').remove([uploaded.path]);
-        const cleanupErrors = [resourceCleanupError, storageCleanupError].filter(Boolean).map(errMsg);
-        return toast(cleanupErrors.length ? `${errMsg(error)} (pulizia non riuscita: ${cleanupErrors.join('; ')})` : errMsg(error), true);
-      }
-    }
-
     const rec = {
       nome,
       descrizione: $('[data-f=descrizione]', row).value.trim() || null,

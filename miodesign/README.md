@@ -11,6 +11,8 @@ Interfaccia web (HTML/JS statico, nessuna build) per la manutenzione dei dati di
 - **Interfaccia**: tema scuro; i file GLB si caricano automaticamente dopo la selezione dal pulsante “Carica GLB”.
 - **Prova configurazione**: anteprima 3D del GLB di una misura; modificando gli attributi assegnati alle mesh vengono applicati i materiali GLB selezionati o le regole di visibilità.
 - **Anagrafica materiali**: definizione di nome, descrizione e riferimento interno, con associazione facoltativa a un GLB di materiale; le opzioni degli attributi possono usare questi materiali.
+- **Codici e prezzi** (`#/codifica`): scelto un prodotto, mostra tutte le combinazioni misura × opzioni ammesse degli attributi e permette di assegnare codice commerciale, descrizione e prezzo (per listino; se non esiste viene creato “Listino base”). Salvataggio con “Salva tutto”; righe svuotate vengono eliminate. Limite: 5000 combinazioni per prodotto.
+- **Test prodotto** (`#/test`): scelta di prodotto, misura e listino, configurazione degli attributi e visualizzazione di codice, descrizione e prezzo della combinazione insieme all'anteprima 3D (circa 70% della larghezza).
 - **Anagrafica attributi/opzioni**: elenco attributi con relative opzioni; creazione/modifica/eliminazione di attributi generali e derivati, opzioni (materiale o visibilità, ordine, attiva), selezione del sottoinsieme di opzioni per i derivati.
 
 ## Setup
@@ -21,4 +23,4 @@ Interfaccia web (HTML/JS statico, nessuna build) per la manutenzione dei dati di
 
 ## Note
 - `materiali.id_glb` è facoltativo per poter creare materiali prima del caricamento dei GLB.
-- Le tabelle per matrice codice/prezzo, listini e versioni sono presenti nello schema; le relative maschere non sono ancora realizzate.
+- Codifica, prezzi e listini usano le tabelle già presenti nello schema (nessuna modifica SQL richiesta); le versioni di pubblicazione non hanno ancora una maschera.

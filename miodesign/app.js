@@ -186,6 +186,8 @@ function viewMenu() {
       <a class="menu-tile" href="#/prodotti"><strong>Anagrafica prodotti</strong><span class="muted">Consulta, crea, modifica ed elimina i prodotti, con misure e attributi assegnati.</span></a>
       <a class="menu-tile" href="#/attributi"><strong>Anagrafica attributi / opzioni</strong><span class="muted">Gestisci gli attributi (generali e derivati) e le relative opzioni.</span></a>
       <a class="menu-tile" href="#/materiali"><strong>Anagrafica materiali</strong><span class="muted">Definisci i materiali e associa il relativo GLB.</span></a>
+      <a class="menu-tile" href="#/codifica"><strong>Codici e prezzi</strong><span class="muted">Per ogni combinazione misura / attributi assegna codice commerciale, descrizione e prezzo.</span></a>
+      <a class="menu-tile" href="#/test"><strong>Test prodotto</strong><span class="muted">Configura un prodotto e verifica codice, descrizione, prezzo e anteprima 3D.</span></a>
     </div>`);
 }
 
@@ -854,6 +856,348 @@ async function viewMateriali(idParam) {
   bindSaveAll(saveMaterials, () => (location.hash === '#/materiali/nuovo' ? go('#/materiali') : viewMateriali()));
 }
 
+// ---------- commerciale: utilità ----------
+async function qAll(make) {
+  const out = [];
+  for (let from = 0; ; from += 1000) {
+    const data = await q(make().range(from, from + 999));
+    out.push(...data);
+    if (data.length < 1000) return out;
+  }
+}
+
+const measureLabel = (m) => `${m.dim_x} × ${m.dim_y} × ${m.dim_z} ${m.unita_misura}`;
+const comboKey = (pairs) => [...pairs].sort((a, b) => a[0] - b[0]).map(([a, o]) => `${a}:${o}`).join('|');
+const cartesian = (attrs) => attrs.reduce((acc, a) => acc.flatMap((c) => a.options.map((o) => [...c, [a.id, o]])), [[]]);
+const MAX_COMBINATIONS = 5000;
+
+// Prodotto con misure e attributi configurabili (solo quelli con almeno un'opzione ammessa).
+async function loadProductConfig(id) {
+  const [prodotto, misure, assegnati, configs] = await Promise.all([
+    q(sb.from('prodotti').select('*').eq('id_prodotto', id).maybeSingle()),
+    q(sb.from('misure').select('*, risorse_glb(id_glb, nome_file, percorso_risorsa)').eq('id_prodotto', id).order('dim_x').order('dim_y').order('dim_z')),
+    q(sb.from('prodotti_attributi').select('*, attributi(nome, tipo_attributo)').eq('id_prodotto', id).order('ordine')),
+    q(sb.from('configurazioni').select('id_attributo, id_opzione').eq('id_prodotto', id)),
+  ]);
+  if (!prodotto) return null;
+  const attrIds = assegnati.map((a) => a.id_attributo);
+  const optionsById = {};
+  if (attrIds.length) {
+    const ao = await q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(id_opzione, nome, attiva, ordine, id_materiale, valore_visibilita, materiali(id_materiale, nome, id_glb, risorse_glb(percorso_risorsa)))').in('id_attributo', attrIds));
+    ao.filter((r) => r.abilitata && r.opzioni).forEach((r) => (optionsById[r.id_attributo] ||= []).push(r.opzioni));
+  }
+  const attributes = assegnati.map((pa) => {
+    const allowed = new Set(configs.filter((c) => c.id_attributo === pa.id_attributo).map((c) => c.id_opzione));
+    const options = (optionsById[pa.id_attributo] || []).filter((o) => allowed.has(o.id_opzione))
+      .sort((a, b) => a.ordine - b.ordine || a.nome.localeCompare(b.nome));
+    return { id: pa.id_attributo, nome: pa.attributi.nome, tipo: pa.attributi.tipo_attributo, defaultId: pa.id_opzione_default, options };
+  }).filter((a) => a.options.length);
+  return { prodotto, misure, attributes };
+}
+
+function productSelect(prodotti, selectedId, base) {
+  return `<div class="field"><label for="sel-prodotto">Prodotto</label><select id="sel-prodotto">
+    <option value="">— seleziona un prodotto —</option>${prodotti.map((p) => `<option value="${p.id_prodotto}" ${p.id_prodotto === selectedId ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}</select></div>`;
+}
+
+async function listiniWithDefault() {
+  let listini = await q(sb.from('listini').select('*').eq('attivo', true).order('nome'));
+  if (!listini.length) {
+    await q(sb.from('listini').insert({ nome: 'Listino base', valuta: 'EUR' }));
+    listini = await q(sb.from('listini').select('*').eq('attivo', true).order('nome'));
+  }
+  return listini;
+}
+
+// ---------- commerciale: codici, descrizioni e prezzi ----------
+async function viewCodifica(idParam) {
+  activeProductPreview?.dispose();
+  activeProductPreview = null;
+  const crumbs = [['Codici e prezzi']];
+  shell('<div class="empty">Caricamento…</div>', crumbs);
+  const prodotti = await q(sb.from('prodotti').select('id_prodotto, nome').order('nome'));
+  const id = idParam ? Number(idParam) : null;
+  const head = (extra = '') => `<div class="page-head"><div><h1>Codici e prezzi</h1><span class="muted">Combinazioni misure / attributi / opzioni con codice, descrizione commerciale e prezzo.</span></div></div>
+    <section class="card"><div class="row">${productSelect(prodotti, id)}${extra}</div></section>`;
+  const bindSelect = () => { $('#sel-prodotto').onchange = (e) => go(e.target.value ? `#/codifica/${e.target.value}` : '#/codifica'); };
+  if (!id) {
+    shell(`${head()}<p class="empty">Seleziona un prodotto per vedere le sue combinazioni.</p>`, crumbs);
+    return bindSelect();
+  }
+
+  const [cfg, listini, existing, existingPrices] = await Promise.all([
+    loadProductConfig(id),
+    listiniWithDefault(),
+    qAll(() => sb.from('codifica').select('id_codice, id_misura, chiave_combinazione, codice_articolo, descrizione_articolo').eq('id_prodotto', id).order('id_codice')),
+    qAll(() => sb.from('prezzi').select('id_listino, id_codice, prezzo, codifica!inner(id_prodotto)').eq('codifica.id_prodotto', id).order('id_codice')),
+  ]);
+  if (!cfg) { toast('Prodotto non trovato', true); return go('#/codifica'); }
+  const { misure, attributes } = cfg;
+
+  const total = misure.length * attributes.reduce((n, a) => n * a.options.length, 1);
+  if (total > MAX_COMBINATIONS) {
+    shell(`${head()}<p class="empty">Il prodotto ha ${total} combinazioni (massimo gestito: ${MAX_COMBINATIONS}). Riduci le opzioni ammesse nella scheda prodotto.</p>`, crumbs);
+    return bindSelect();
+  }
+  if (!misure.length) {
+    shell(`${head()}<p class="empty">Il prodotto non ha misure: aggiungile nella scheda prodotto.</p>`, crumbs);
+    return bindSelect();
+  }
+
+  const byKey = new Map(existing.map((c) => [`${c.id_misura}|${c.chiave_combinazione}`, c]));
+  const priceByCode = new Map();
+  existingPrices.forEach((p) => priceByCode.set(`${p.id_listino}|${p.id_codice}`, p.prezzo == null ? '' : String(p.prezzo)));
+  const optionName = new Map(attributes.flatMap((a) => a.options.map((o) => [`${a.id}:${o.id_opzione}`, o.nome])));
+
+  const rows = [];
+  for (const misura of misure) {
+    for (const pairs of cartesian(attributes.map((a) => ({ id: a.id, options: a.options.map((o) => o.id_opzione) })))) {
+      const key = comboKey(pairs);
+      const found = byKey.get(`${misura.id_misura}|${key}`);
+      const prices = {};
+      if (found) listini.forEach((l) => { prices[l.id_listino] = priceByCode.get(`${l.id_listino}|${found.id_codice}`) ?? ''; });
+      else listini.forEach((l) => { prices[l.id_listino] = ''; });
+      const row = { misura, key, pairs, existingId: found?.id_codice ?? null, codice: found?.codice_articolo ?? '', descr: found?.descrizione_articolo ?? '', prices };
+      row.orig = JSON.stringify([row.codice, row.descr, row.prices]);
+      row.text = `${measureLabel(misura)} ${pairs.map(([a, o]) => `${attributes.find((x) => x.id === a).nome} ${optionName.get(`${a}:${o}`)}`).join(' ')}`.toLowerCase();
+      rows.push(row);
+    }
+  }
+
+  let listinoId = listini[0].id_listino;
+  let measureFilter = '';
+  let textFilter = '';
+  const MAX_SHOWN = 500;
+
+  shell(`${head(`<div class="field"><label for="sel-listino">Listino</label><select id="sel-listino">${listini.map((l) => `<option value="${l.id_listino}">${esc(l.nome)} (${esc(l.valuta)})</option>`).join('')}</select></div>
+      <div class="field shrink"><label>&nbsp;</label><button type="button" class="small" id="new-listino">+ Nuovo listino</button></div>`)}
+    <section class="card">
+      <div class="row"><div class="field"><label for="flt-misura">Misura</label><select id="flt-misura"><option value="">Tutte</option>${misure.map((m) => `<option value="${m.id_misura}">${esc(measureLabel(m))}</option>`).join('')}</select></div>
+        <div class="field"><label for="flt-text">Cerca</label><input id="flt-text" class="search" placeholder="Attributo, opzione, misura…"></div></div>
+      <p class="muted" id="combo-count"></p>
+      <div class="table-scroll"><table><thead><tr><th>Misura</th><th>Combinazione</th><th>Codice commerciale</th><th>Descrizione commerciale</th><th>Prezzo</th></tr></thead><tbody id="combos"></tbody></table></div>
+    </section>${saveBar()}`, crumbs);
+  bindSelect();
+
+  const draw = () => {
+    const visible = rows.map((r, i) => [r, i]).filter(([r]) => (!measureFilter || String(r.misura.id_misura) === measureFilter) && (!textFilter || r.text.includes(textFilter)));
+    $('#combo-count').textContent = `${visible.length} combinazioni su ${rows.length}${visible.length > MAX_SHOWN ? ` (mostrate le prime ${MAX_SHOWN}: usa i filtri)` : ''}.`;
+    $('#combos').innerHTML = visible.slice(0, MAX_SHOWN).map(([r, i]) => `<tr data-i="${i}">
+      <td>${esc(measureLabel(r.misura))}</td>
+      <td>${r.pairs.map(([a, o]) => `<span class="chip">${esc(attributes.find((x) => x.id === a).nome)}: ${esc(optionName.get(`${a}:${o}`))}</span>`).join(' ') || '<span class="muted">—</span>'}</td>
+      <td><input data-f="codice" maxlength="100" value="${esc(r.codice)}" aria-label="Codice commerciale"></td>
+      <td><input data-f="descr" value="${esc(r.descr)}" aria-label="Descrizione commerciale"></td>
+      <td style="width:130px"><input data-f="prezzo" type="number" min="0" step="0.01" value="${esc(r.prices[listinoId])}" aria-label="Prezzo"></td></tr>`).join('')
+      || '<tr><td colspan="5" class="empty">Nessuna combinazione.</td></tr>';
+  };
+  draw();
+
+  $('#combos').addEventListener('input', (e) => {
+    const f = e.target.dataset.f;
+    if (!f) return;
+    const row = rows[Number(e.target.closest('tr').dataset.i)];
+    if (f === 'prezzo') row.prices[listinoId] = e.target.value;
+    else row[f] = e.target.value;
+  });
+  $('#sel-listino').onchange = (e) => { listinoId = Number(e.target.value); draw(); };
+  $('#flt-misura').onchange = (e) => { measureFilter = e.target.value; draw(); };
+  $('#flt-text').oninput = (e) => { textFilter = e.target.value.trim().toLowerCase(); draw(); };
+  $('#new-listino').onclick = async () => {
+    const nome = prompt('Nome del nuovo listino:');
+    if (!nome?.trim()) return;
+    if (await act(() => q(sb.from('listini').insert({ nome: nome.trim(), valuta: 'EUR' })), 'Listino creato')) viewCodifica(String(id));
+  };
+
+  const chunks = (list, n = 200) => Array.from({ length: Math.ceil(list.length / n) }, (_, i) => list.slice(i * n, (i + 1) * n));
+  const saveCodifica = async () => {
+    const dirty = rows.filter((r) => JSON.stringify([r.codice, r.descr, r.prices]) !== r.orig);
+    const hasData = (r) => r.codice.trim() || r.descr.trim() || Object.values(r.prices).some((p) => p !== '');
+    for (const r of dirty) {
+      for (const p of Object.values(r.prices)) {
+        if (p !== '' && !(Number(p) >= 0)) throw new Error('Il prezzo deve essere un numero maggiore o uguale a zero.');
+      }
+    }
+    const toInsert = dirty.filter((r) => !r.existingId && hasData(r));
+    const toUpdate = dirty.filter((r) => r.existingId && hasData(r));
+    const toDelete = dirty.filter((r) => r.existingId && !hasData(r));
+    const fields = (r) => ({ codice_articolo: r.codice.trim() || null, descrizione_articolo: r.descr.trim() || null });
+
+    if (toDelete.length) for (const part of chunks(toDelete.map((r) => r.existingId))) await q(sb.from('codifica').delete().in('id_codice', part));
+    for (const r of toUpdate) await q(sb.from('codifica').update(fields(r)).eq('id_codice', r.existingId));
+    for (const part of chunks(toInsert)) {
+      const created = await q(sb.from('codifica').insert(part.map((r) => ({ id_prodotto: id, id_misura: r.misura.id_misura, chiave_combinazione: r.key, ...fields(r) }))).select('id_codice, id_misura, chiave_combinazione'));
+      const idByKey = new Map(created.map((c) => [`${c.id_misura}|${c.chiave_combinazione}`, c.id_codice]));
+      part.forEach((r) => { r.existingId = idByKey.get(`${r.misura.id_misura}|${r.key}`); });
+      await q(sb.from('codifica_dettagli').insert(part.flatMap((r) => r.pairs.map(([a, o]) => ({ id_codice: r.existingId, id_attributo: a, id_opzione: o })))));
+    }
+
+    const upserts = [], deletes = [];
+    dirty.filter((r) => r.existingId && hasData(r)).forEach((r) => {
+      const orig = JSON.parse(r.orig)[2];
+      listini.forEach((l) => {
+        const now = r.prices[l.id_listino];
+        if (now === (orig[l.id_listino] ?? '')) return;
+        if (now === '') deletes.push({ l: l.id_listino, c: r.existingId });
+        else upserts.push({ id_listino: l.id_listino, id_codice: r.existingId, prezzo: Number(now) });
+      });
+    });
+    for (const part of chunks(upserts)) await q(sb.from('prezzi').upsert(part, { onConflict: 'id_listino,id_codice' }));
+    for (const d of deletes) await q(sb.from('prezzi').delete().eq('id_listino', d.l).eq('id_codice', d.c));
+  };
+  bindSaveAll(saveCodifica, () => viewCodifica(String(id)));
+}
+
+// ---------- commerciale: test finale prodotto ----------
+async function viewTest(idParam) {
+  const token = ++productPreviewToken;
+  activeProductPreview?.dispose();
+  activeProductPreview = null;
+  const crumbs = [['Test prodotto']];
+  shell('<div class="empty">Caricamento…</div>', crumbs);
+  const prodotti = await q(sb.from('prodotti').select('id_prodotto, nome').order('nome'));
+  const id = idParam ? Number(idParam) : null;
+  const head = `<div class="page-head"><div><h1>Test prodotto</h1><span class="muted">Configura il prodotto e verifica codice, descrizione, prezzo e aspetto 3D.</span></div></div>`;
+  const bindSelect = () => { $('#sel-prodotto').onchange = (e) => go(e.target.value ? `#/test/${e.target.value}` : '#/test'); };
+  if (!id) {
+    shell(`${head}<section class="card">${productSelect(prodotti, null)}</section><p class="empty">Seleziona un prodotto da provare.</p>`, crumbs);
+    return bindSelect();
+  }
+
+  const [cfg, listini] = await Promise.all([loadProductConfig(id), listiniWithDefault()]);
+  if (!cfg) { toast('Prodotto non trovato', true); return go('#/test'); }
+  const { misure, attributes } = cfg;
+  const optionById = new Map(attributes.flatMap((a) => a.options.map((o) => [o.id_opzione, o])));
+
+  shell(`${head}
+    <section class="card"><div class="row">${productSelect(prodotti, id)}
+      <div class="field"><label for="t-misura">Misura</label><select id="t-misura">${misure.map((m) => `<option value="${m.id_misura}">${esc(measureLabel(m))}${m.id_glb ? '' : ' (senza GLB)'}</option>`).join('')}</select></div>
+      <div class="field"><label for="t-listino">Listino</label><select id="t-listino">${listini.map((l) => `<option value="${l.id_listino}">${esc(l.nome)} (${esc(l.valuta)})</option>`).join('')}</select></div></div></section>
+    <div class="test-layout">
+      <div><div class="product-preview-stage test-stage" id="testStage"></div><p class="preview-status muted" id="t-status" role="status"></p></div>
+      <aside>
+        <section class="card"><h2>Configurazione</h2>
+          ${attributes.map((a) => `<div class="field"><label for="t-attr-${a.id}">${esc(a.nome)}</label><select id="t-attr-${a.id}" data-t-attr="${a.id}">
+            ${a.options.map((o) => `<option value="${o.id_opzione}" ${(a.defaultId ?? a.options[0].id_opzione) === o.id_opzione ? 'selected' : ''}>${esc(o.nome)}</option>`).join('')}</select></div>`).join('') || '<p class="muted">Nessun attributo configurabile.</p>'}
+        </section>
+        <section class="card result-card"><h2>Risultato</h2><div id="t-result" class="muted">…</div></section>
+      </aside></div>`, crumbs);
+  bindSelect();
+  if (!misure.length) { $('#t-result').textContent = 'Il prodotto non ha misure.'; return; }
+
+  const measureSelect = $('#t-misura');
+  const status = $('#t-status');
+  const currentMeasure = () => misure.find((m) => String(m.id_misura) === measureSelect.value);
+  const selection = () => attributes.map((a) => [a.id, Number($(`[data-t-attr="${a.id}"]`).value)]);
+
+  // risultato commerciale
+  let resultRevision = 0;
+  const updateResult = async () => {
+    const revision = ++resultRevision;
+    const box = $('#t-result');
+    const m = currentMeasure();
+    const listino = listini.find((l) => String(l.id_listino) === $('#t-listino').value);
+    try {
+      const code = await q(sb.from('codifica').select('id_codice, codice_articolo, descrizione_articolo, attiva').eq('id_prodotto', id).eq('id_misura', m.id_misura).eq('chiave_combinazione', comboKey(selection())).maybeSingle());
+      let price = null;
+      if (code) {
+        const p = await q(sb.from('prezzi').select('prezzo').eq('id_listino', listino.id_listino).eq('id_codice', code.id_codice).maybeSingle());
+        price = p?.prezzo ?? null;
+      }
+      if (revision !== resultRevision || token !== productPreviewToken) return;
+      box.className = '';
+      box.innerHTML = code ? `<dl class="result-list">
+        <dt>Codice commerciale</dt><dd>${code.codice_articolo ? esc(code.codice_articolo) : '<span class="muted">non assegnato</span>'}</dd>
+        <dt>Descrizione commerciale</dt><dd>${code.descrizione_articolo ? esc(code.descrizione_articolo) : '<span class="muted">non assegnata</span>'}</dd>
+        <dt>Prezzo</dt><dd class="price">${price == null ? '<span class="muted">non definito</span>' : `${Number(price).toLocaleString('it-IT', { style: 'currency', currency: listino.valuta })}`}</dd>
+        ${code.attiva ? '' : '<dt>Stato</dt><dd><span class="badge no">Combinazione non attiva</span></dd>'}</dl>`
+        : '<p class="muted">Combinazione non codificata: assegna codice e prezzo in “Codici e prezzi”.</p>';
+    } catch (error) {
+      if (revision === resultRevision) box.textContent = errMsg(error);
+    }
+  };
+
+  // anteprima 3D
+  const glbIds = [...new Set(misure.map((m) => m.id_glb).filter(Boolean))];
+  let meshRows = [], mappings = {};
+  if (glbIds.length) {
+    const [meshes, assoc] = await Promise.all([
+      q(sb.from('mesh_glb').select('id_mesh, id_glb, percorso_nodo').in('id_glb', glbIds)),
+      q(sb.from('associazioni_mesh').select('id_mesh, id_attributo').eq('id_prodotto', id)),
+    ]);
+    meshRows = meshes;
+    assoc.forEach((a) => { mappings[a.id_mesh] = a.id_attributo; });
+  }
+  const signedUrls = new Map();
+  const signedUrlFor = async (path) => {
+    const cached = signedUrls.get(path);
+    if (cached && cached.expiresAt > Date.now()) return cached.url;
+    const { data, error } = await sb.storage.from('modelli-glb').createSignedUrl(path, 300);
+    if (error) throw error;
+    signedUrls.set(path, { url: data.signedUrl, expiresAt: Date.now() + 4 * 60 * 1000 });
+    return data.signedUrl;
+  };
+  let viewer = null;
+  let applyRevision = 0;
+  const applyPreview = async () => {
+    if (!viewer || token !== productPreviewToken) return;
+    const revision = ++applyRevision;
+    const m = currentMeasure();
+    const chosen = new Map(selection());
+    const messages = [];
+    const entries = [];
+    for (const mesh of meshRows.filter((x) => x.id_glb === m.id_glb)) {
+      const attributeId = mappings[mesh.id_mesh];
+      const attribute = attributes.find((a) => a.id === attributeId);
+      const option = attribute && optionById.get(chosen.get(attributeId));
+      if (!option) continue;
+      if (attribute.tipo === 'Materiale') {
+        const path = option.materiali?.risorse_glb?.percorso_risorsa;
+        if (!path) { messages.push(`${attribute.nome}: ${option.nome} non ha un GLB materiale.`); continue; }
+        entries.push({ path: mesh.percorso_nodo, material: await viewer.loadMaterial(option.id_materiale, await signedUrlFor(path)) });
+      } else if (option.valore_visibilita !== null) {
+        entries.push({ path: mesh.percorso_nodo, visible: option.valore_visibilita });
+      }
+    }
+    if (revision !== applyRevision || token !== productPreviewToken) return;
+    viewer.applyConfiguration(entries);
+    status.textContent = messages.join(' ');
+    status.classList.toggle('error-text', messages.length > 0);
+  };
+  const guarded = (fn) => () => fn().catch((error) => {
+    status.textContent = `Anteprima non disponibile: ${errMsg(error)}`;
+    status.classList.add('error-text');
+  });
+  const loadMeasure = async () => {
+    const m = currentMeasure();
+    applyRevision += 1;
+    status.classList.remove('error-text');
+    if (!m.risorse_glb?.percorso_risorsa) {
+      status.textContent = 'Questa misura non ha un GLB associato.';
+      return;
+    }
+    status.textContent = 'Caricamento del modello…';
+    const url = await signedUrlFor(m.risorse_glb.percorso_risorsa);
+    if (token !== productPreviewToken) return;
+    if (!viewer) {
+      const { createProductPreview } = await import('./product-preview.js');
+      if (token !== productPreviewToken) return;
+      viewer = createProductPreview($('#testStage'));
+      activeProductPreview = viewer;
+    }
+    await viewer.loadProduct(url);
+    if (token !== productPreviewToken) return;
+    status.textContent = '';
+    await applyPreview();
+  };
+
+  const onConfigChange = () => { updateResult(); guarded(applyPreview)(); };
+  $$('[data-t-attr]').forEach((s) => { s.onchange = onConfigChange; });
+  $('#t-listino').onchange = updateResult;
+  measureSelect.onchange = () => { updateResult(); guarded(loadMeasure)(); };
+  updateResult();
+  guarded(loadMeasure)();
+}
+
 // ---------- routing ----------
 async function route() {
   if (!session) return viewLogin();
@@ -863,6 +1207,8 @@ async function route() {
     if (a === 'prodotti') return b ? await viewProdotto(b) : await viewProdotti();
     if (a === 'attributi') return b ? await viewAttributo(b) : await viewAttributi();
     if (a === 'materiali') return await viewMateriali(b);
+    if (a === 'codifica') return await viewCodifica(b);
+    if (a === 'test') return await viewTest(b);
     go('#/');
   } catch (e) {
     toast(errMsg(e), true);

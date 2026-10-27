@@ -88,3 +88,12 @@ td.actions { white-space: nowrap; text-align: right; }
 }
 
 .save-bar { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: flex-end; align-items: center; gap: 1rem; margin-top: 1rem; padding: .75rem 1rem; background: var(--card-raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 -4px 16px rgba(0, 0, 0, .35); }
+
+main:has(.test-layout) { max-width: none; }
+.test-layout { display: grid; grid-template-columns: minmax(0, 7fr) minmax(260px, 3fr); gap: 1rem; align-items: start; margin-top: 1rem; }
+.test-stage { height: 75vh; min-height: 420px; margin-top: 0; }
+.result-list { margin: 0; }
+.result-list dt { color: var(--muted); font-size: .8rem; margin-top: .6rem; }
+.result-list dd { margin: .1rem 0 0; font-size: 1.05rem; }
+.result-list dd.price { font-size: 1.5rem; font-weight: 600; color: var(--accent-hover); }
+@media (max-width: 800px) { .test-layout { grid-template-columns: 1fr; } .test-stage { height: 55vh; } }

@@ -6,7 +6,8 @@ Interfaccia web (HTML/JS statico, nessuna build) per la manutenzione dei dati di
 - **Login** con Supabase Auth (email/password).
 - **Menu iniziale**: Anagrafica prodotti, Anagrafica attributi/opzioni, Anagrafica materiali.
 - **Anagrafica prodotti**: elenco, creazione (ID progressivo automatico), modifica, eliminazione; per ogni prodotto misure (terne X/Y/Z), GLB per misura e attributi assegnati con opzioni ammesse, default, ordine, obbligatorietà.
-- **GLB e mesh**: caricamento del GLB di oggetto per ogni terna di misure; la mappatura mesh-attributo è condivisa dal prodotto e replicata sui GLB delle sue misure. I GLB dello stesso prodotto devono avere gli stessi percorsi mesh.
+- **GLB e mesh**: caricamento automatico del GLB di oggetto quando si seleziona un file per una terna di misure; ogni GLB ha una mappatura mesh-attributo indipendente, senza richiedere mesh uguali tra misure.
+- **Interfaccia**: tema scuro; i file GLB si caricano automaticamente dopo la selezione dal pulsante “Carica GLB”.
 - **Prova configurazione**: anteprima 3D del GLB di una misura; modificando gli attributi assegnati alle mesh vengono applicati i materiali GLB selezionati o le regole di visibilità.
 - **Anagrafica materiali**: definizione di nome, descrizione e riferimento interno, con associazione facoltativa a un GLB di materiale; le opzioni degli attributi possono usare questi materiali.
 - **Anagrafica attributi/opzioni**: elenco attributi con relative opzioni; creazione/modifica/eliminazione di attributi generali e derivati, opzioni (materiale o visibilità, ordine, attiva), selezione del sottoinsieme di opzioni per i derivati.

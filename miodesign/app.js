@@ -5,6 +5,8 @@ const configured = !SUPABASE_URL.includes('YOUR-PROJECT');
 const sb = configured ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY) : null;
 const app = document.getElementById('app');
 let session = null;
+let activeProductPreview = null;
+let productPreviewToken = 0;
 
 // ---------- utilità ----------
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -215,17 +217,20 @@ async function viewProdotti() {
 
 // ---------- prodotti: scheda ----------
 async function viewProdotto(idParam) {
+  const previewToken = ++productPreviewToken;
+  activeProductPreview?.dispose();
+  activeProductPreview = null;
   const isNew = idParam === 'nuovo';
   const id = isNew ? null : Number(idParam);
   shell('<div class="empty">Caricamento…</div>', [['Anagrafica prodotti', '#/prodotti'], [isNew ? 'Nuovo prodotto' : `Prodotto ${id}`]]);
 
   let prodotto = { nome: '', descrizione: '', attivo: true };
   let misure = [], assegnati = [], configs = [], tuttiAttributi = [], opzioniPerAttr = [];
-  let meshRows = [], meshMapping = {}, meshCompatible = true;
+  let meshRows = [], meshMapping = {}, meshCompatible = true, previewOptionsByAttr = {}, meshMappingsByPath = {};
   if (!isNew) {
     const [p, m, pa, cf, attrs] = await Promise.all([
       q(sb.from('prodotti').select('*').eq('id_prodotto', id).maybeSingle()),
-      q(sb.from('misure').select('*, risorse_glb(id_glb, nome_file)').eq('id_prodotto', id).order('id_misura')),
+      q(sb.from('misure').select('*, risorse_glb(id_glb, nome_file, percorso_risorsa)').eq('id_prodotto', id).order('id_misura')),
       q(sb.from('prodotti_attributi').select('*, attributi(nome, tipo_attributo)').eq('id_prodotto', id).order('ordine')),
       q(sb.from('configurazioni').select('id_attributo, id_opzione').eq('id_prodotto', id)),
       q(sb.from('attributi').select('id_attributo, nome, tipo_attributo, attivo').order('nome')),
@@ -234,9 +239,10 @@ async function viewProdotto(idParam) {
     prodotto = p; misure = m; assegnati = pa; configs = cf; tuttiAttributi = attrs;
     const ids = assegnati.map((a) => a.id_attributo);
     if (ids.length) {
-      const ao = await q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(id_opzione, nome, attiva, ordine)').in('id_attributo', ids));
+      const ao = await q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(id_opzione, nome, attiva, ordine, id_materiale, valore_visibilita, materiali(id_materiale, nome, id_glb, risorse_glb(percorso_risorsa)))').in('id_attributo', ids));
       ao.filter((r) => r.abilitata && r.opzioni).forEach((r) => (opzioniPerAttr[r.id_attributo] ||= []).push(r.opzioni));
       Object.values(opzioniPerAttr).forEach((l) => l.sort((a, b) => a.ordine - b.ordine || a.nome.localeCompare(b.nome)));
+      previewOptionsByAttr = opzioniPerAttr;
     }
     const glbIds = [...new Set(misure.map((misura) => misura.id_glb).filter(Boolean))];
     if (glbIds.length) {
@@ -253,7 +259,9 @@ async function viewProdotto(idParam) {
       meshRows.forEach((mesh) => {
         const matchingMeshIds = allMeshes.filter((candidate) => candidate.percorso_nodo === mesh.percorso_nodo)
           .map((candidate) => candidate.id_mesh);
-        meshMapping[mesh.percorso_nodo] = allMappings.find((mapping) => matchingMeshIds.includes(mapping.id_mesh))?.id_attributo || '';
+        const mapping = allMappings.find((candidate) => matchingMeshIds.includes(candidate.id_mesh));
+        meshMapping[mesh.percorso_nodo] = mapping?.id_attributo || '';
+        if (mapping) meshMappingsByPath[mesh.percorso_nodo] = mapping.id_attributo;
       });
     }
   }
@@ -285,6 +293,8 @@ async function viewProdotto(idParam) {
   };
 
   const assegnabili = tuttiAttributi.filter((a) => a.attivo && !assegnati.some((x) => x.id_attributo === a.id_attributo));
+  const previewMeasures = misure.filter((measure) => measure.id_glb && measure.risorse_glb?.percorso_risorsa);
+  const previewAttributeIds = [...new Set(Object.values(meshMappingsByPath))];
 
   shell(`
     <div class="page-head"><div><h1>${isNew ? 'Nuovo prodotto' : esc(prodotto.nome)}</h1>
@@ -314,7 +324,28 @@ async function viewProdotto(idParam) {
           ${meshRows.map((mesh, index) => `<tr><td>${esc(mesh.nome_mesh)}</td><td><code>${esc(mesh.percorso_nodo)}</code></td><td>${esc(mesh.materiale_base || '—')}</td>
             <td><select data-mesh-map="${index}"><option value="">— non mappata —</option>${assegnati.map((pa) => `<option value="${pa.id_attributo}" ${String(meshMapping[mesh.percorso_nodo]) === String(pa.id_attributo) ? 'selected' : ''}>${esc(pa.attributi.nome)} (${esc(pa.attributi.tipo_attributo)})</option>`).join('')}</select></td></tr>`).join('')}
           </tbody></table></div><button class="primary" id="save-mesh-map">Salva mappatura</button>`
-        : '<p class="empty">Nessuna mesh disponibile nei GLB associati.</p>'}</section>`}`,
+        : '<p class="empty">Nessuna mesh disponibile nei GLB associati.</p>'}</section>
+    <section class="card"><h2>Prova configurazione</h2>
+      <p class="muted">Seleziona gli attributi e verifica in anteprima il materiale applicato alle mesh del GLB.</p>
+      ${previewMeasures.length && previewAttributeIds.length ? `<div class="product-preview-grid">
+        <div><label for="preview-measure">Modello per misura</label>
+          <select id="preview-measure">${previewMeasures.map((measure) => `<option value="${measure.id_misura}">${esc(measure.dim_x)} × ${esc(measure.dim_y)} × ${esc(measure.dim_z)} ${esc(measure.unita_misura)}</option>`).join('')}</select>
+          <div class="product-preview-stage" id="productPreview"></div>
+          <p class="preview-status muted" id="preview-status" role="status">Caricamento del modello…</p>
+        </div>
+        <div class="preview-attributes"><h3>Attributi</h3>
+          ${previewAttributeIds.map((attributeId) => {
+            const attribute = assegnati.find((item) => item.id_attributo === attributeId);
+            if (!attribute) return '';
+            const allowedIds = new Set(configs.filter((config) => config.id_attributo === attributeId).map((config) => config.id_opzione));
+            const options = (previewOptionsByAttr[attributeId] || []).filter((option) => allowedIds.has(option.id_opzione));
+            return `<div class="field"><label for="preview-attr-${attributeId}">${esc(attribute.attributi.nome)}</label>
+              <select id="preview-attr-${attributeId}" data-preview-attribute="${attributeId}">
+                <option value="">— seleziona —</option>${options.map((option) => `<option value="${option.id_opzione}" ${String(option.id_opzione) === String(attribute.id_opzione_default || '') ? 'selected' : ''}>${esc(option.nome)}</option>`).join('')}
+              </select></div>`;
+          }).join('')}
+        </div></div>`
+      : '<p class="empty">Associa un GLB a una misura e mappa almeno una mesh a un attributo per avviare la prova.</p>'}</section>`}`,
     [['Anagrafica prodotti', '#/prodotti'], [isNew ? 'Nuovo prodotto' : `Prodotto ${id}`]]);
 
   $('#form-prodotto').onsubmit = async (e) => {
@@ -448,6 +479,96 @@ async function viewProdotto(idParam) {
       }
     };
   });
+
+  if (previewMeasures.length && previewAttributeIds.length) {
+    const stage = $('#productPreview');
+    const status = $('#preview-status');
+    const measureSelect = $('#preview-measure');
+    const signedUrls = new Map();
+    let previewViewer = null;
+    const signedUrlFor = async (path) => {
+      const cached = signedUrls.get(path);
+      if (cached && cached.expiresAt > Date.now()) return cached.url;
+      try {
+        const { data, error } = await sb.storage.from('modelli-glb').createSignedUrl(path, 300);
+        if (error) throw error;
+        signedUrls.set(path, { url: data.signedUrl, expiresAt: Date.now() + 4 * 60 * 1000 });
+        return data.signedUrl;
+      } catch (error) {
+        signedUrls.delete(path);
+        throw error;
+      }
+    };
+    const optionFor = (attributeId) => {
+      const optionId = $(`[data-preview-attribute="${attributeId}"]`).value;
+      return (previewOptionsByAttr[attributeId] || []).find((option) => String(option.id_opzione) === optionId);
+    };
+    let applyRevision = 0;
+    const applyPreview = async () => {
+      if (!previewViewer || previewToken !== productPreviewToken) return;
+      const revision = ++applyRevision;
+      const messages = [];
+      const entries = [];
+      for (const mesh of meshRows) {
+        const attributeId = meshMappingsByPath[mesh.percorso_nodo];
+        if (!attributeId) continue;
+        const option = optionFor(attributeId);
+        if (!option) continue;
+        const attribute = assegnati.find((item) => item.id_attributo === attributeId);
+        if (attribute?.attributi.tipo_attributo === 'Materiale') {
+          if (!option.materiali?.id_glb || !option.materiali.risorse_glb?.percorso_risorsa) {
+            messages.push(`${attribute.attributi.nome}: ${option.nome} non ha un GLB materiale associato.`);
+            entries.push({ path: mesh.percorso_nodo });
+            continue;
+          }
+          const url = await signedUrlFor(option.materiali.risorse_glb.percorso_risorsa);
+          const material = await previewViewer.loadMaterial(option.id_materiale, url);
+          entries.push({ path: mesh.percorso_nodo, material });
+        } else if (option.valore_visibilita !== null) {
+          entries.push({ path: mesh.percorso_nodo, visible: option.valore_visibilita });
+        }
+      }
+      if (revision !== applyRevision || previewToken !== productPreviewToken) return;
+      previewViewer.applyConfiguration(entries);
+      status.textContent = messages.length ? messages.join(' ') : 'Anteprima aggiornata.';
+      status.classList.toggle('error-text', messages.length > 0);
+    };
+    const loadSelectedMeasure = async () => {
+      const selectedMeasure = previewMeasures.find((measure) => String(measure.id_misura) === measureSelect.value);
+      if (!selectedMeasure) return;
+      applyRevision += 1;
+      measureSelect.disabled = true;
+      status.textContent = 'Caricamento del modello…';
+      status.classList.remove('error-text');
+      try {
+        const url = await signedUrlFor(selectedMeasure.risorse_glb.percorso_risorsa);
+        if (previewToken !== productPreviewToken) return;
+        const { createProductPreview } = await import('./product-preview.js');
+        if (!previewViewer) {
+          previewViewer = createProductPreview(stage);
+          activeProductPreview = previewViewer;
+        }
+        await previewViewer.loadProduct(url);
+        if (previewToken !== productPreviewToken) return;
+        await applyPreview();
+      } catch (error) {
+        status.textContent = `Impossibile caricare l’anteprima: ${errMsg(error)}`;
+        status.classList.add('error-text');
+      } finally {
+        measureSelect.disabled = false;
+      }
+    };
+    measureSelect.onchange = loadSelectedMeasure;
+    $$('[data-preview-attribute]').forEach((select) => {
+      select.onchange = () => {
+        applyPreview().catch((error) => {
+          status.textContent = `Impossibile aggiornare l’anteprima: ${errMsg(error)}`;
+          status.classList.add('error-text');
+        });
+      };
+    });
+    loadSelectedMeasure();
+  }
 }
 
 // ---------- attributi: elenco ----------
@@ -721,7 +842,12 @@ async function route() {
   }
 }
 
-window.addEventListener('hashchange', route);
+window.addEventListener('hashchange', () => {
+  productPreviewToken += 1;
+  activeProductPreview?.dispose();
+  activeProductPreview = null;
+  route();
+});
 if (sb) {
   const { data } = await sb.auth.getSession();
   session = data.session;

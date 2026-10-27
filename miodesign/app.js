@@ -133,6 +133,19 @@ async function uploadGlbResource(file, type, folder) {
 
 const go = (hash) => { location.hash = hash; };
 
+const saveBar = (label = 'Salva tutto') => `<div class="save-bar"><span class="muted">Un solo pulsante salva tutte le modifiche della pagina.</span><button class="primary" id="save-all" type="button">${label}</button></div>`;
+
+// Collega il pulsante unico di salvataggio: fn lancia un errore se qualcosa non va, after parte solo a salvataggio riuscito.
+function bindSaveAll(fn, after) {
+  const button = $('#save-all');
+  button.onclick = async () => {
+    button.disabled = true;
+    const ok = await act(fn, 'Modifiche salvate');
+    button.disabled = false;
+    if (ok && after) after();
+  };
+}
+
 // ---------- layout ----------
 function shell(content, crumbs = []) {
   const trail = [['Menu', '#/'], ...crumbs]
@@ -255,16 +268,14 @@ async function viewProdotto(idParam) {
     }
   }
 
-  const misuraRow = (m) => `<tr data-misura="${m?.id_misura ?? 'new'}">
+  const misuraRow = (m) => `<tr data-misura="${m?.id_misura ?? 'new'}" data-glb="${m?.id_glb ?? ''}">
       <td><input type="number" step="any" data-f="dim_x" value="${esc(m?.dim_x)}" aria-label="Larghezza"></td>
       <td><input type="number" step="any" data-f="dim_y" value="${esc(m?.dim_y)}" aria-label="Altezza"></td>
       <td><input type="number" step="any" data-f="dim_z" value="${esc(m?.dim_z)}" aria-label="Profondità"></td>
       <td><select data-f="unita_misura">${['cm', 'mm'].map((u) => `<option ${((m?.unita_misura) || 'cm') === u ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
-      <td>${m?.risorse_glb ? `<span class="chip">${esc(m.risorse_glb.nome_file)}</span>` : '<span class="muted">Nessun GLB</span>'}
-        ${m ? `<label class="upload-button small">Carica GLB<input type="file" data-f="glb" accept=".glb,model/gltf-binary" aria-label="Carica GLB oggetto"></label><span class="upload-status muted" data-upload-status></span>` : ''}</td>
-      <td class="actions">${m
-        ? `${m.id_glb ? '<button class="small danger" data-act="clear-glb">Rimuovi GLB</button> ' : ''}<button class="small" data-act="save">Salva</button> <button class="small danger" data-act="del">Elimina</button>`
-        : '<button class="small primary" data-act="add">Aggiungi</button>'}</td></tr>`;
+      <td><span data-glb-name>${m?.risorse_glb ? `<span class="chip">${esc(m.risorse_glb.nome_file)}</span>` : '<span class="muted">Nessun GLB</span>'}</span>
+        <label class="upload-button small">Carica GLB<input type="file" data-f="glb" accept=".glb,model/gltf-binary" aria-label="Carica GLB oggetto"></label><span class="upload-status muted" data-upload-status></span></td>
+      <td class="actions">${m ? '<button class="small danger" data-act="clear-glb">Rimuovi GLB</button> <button class="small danger" data-act="del">Elimina</button>' : ''}</td></tr>`;
 
   const attrBlock = (pa) => {
     const opts = opzioniPerAttr[pa.id_attributo] || [];
@@ -277,7 +288,7 @@ async function viewProdotto(idParam) {
         <div><label>Default</label><select data-f="default"><option value="">— nessuno —</option>${opts.filter((o) => sel.has(o.id_opzione)).map((o) => `<option value="${o.id_opzione}" ${pa.id_opzione_default === o.id_opzione ? 'selected' : ''}>${esc(o.nome)}</option>`).join('')}</select></div>
         <div><label>Ordine</label><input type="number" data-f="ordine" value="${pa.ordine}"></div>
         <label class="check shrink"><input type="checkbox" data-f="obbligatorio" ${pa.obbligatorio ? 'checked' : ''}> Obbligatorio</label>
-        <div class="shrink"><button class="small primary" data-act="save">Salva attributo</button> <button class="small danger" data-act="remove">Rimuovi</button></div>
+        <div class="shrink"><button class="small danger" type="button" data-act="remove">Rimuovi</button></div>
       </div></div>`;
   };
 
@@ -299,8 +310,7 @@ async function viewProdotto(idParam) {
       <div id="mesh-map-rows">${rows.length ? `<div class="table-scroll"><table><thead><tr><th>Mesh</th><th>Percorso</th><th>Materiale originale</th><th>Attributo</th></tr></thead><tbody>
         ${rows.map((mesh) => `<tr data-mesh-id="${mesh.id_mesh}"><td>${esc(mesh.nome_mesh)}</td><td><code>${esc(mesh.percorso_nodo)}</code></td><td>${esc(mesh.materiale_base || '—')}</td>
           <td><select data-mesh-map><option value="">— non mappata —</option>${assegnati.map((pa) => `<option value="${pa.id_attributo}" ${String(meshMappingsById[mesh.id_mesh] || '') === String(pa.id_attributo) ? 'selected' : ''}>${esc(pa.attributi.nome)} (${esc(pa.attributi.tipo_attributo)})</option>`).join('')}</select></td></tr>`).join('')}
-        </tbody></table></div>` : '<p class="empty">Nessuna mesh nel GLB di questa misura.</p>'}
-        <button class="primary" id="save-mesh-map">Salva mappatura di questa misura</button></div>`;
+        </tbody></table></div>` : '<p class="empty">Nessuna mesh nel GLB di questa misura.</p>'}</div>`;
   };
   const previewAttributesMarkup = (measureId) => {
     const attributeIds = mappedAttributeIds(measureId);
@@ -319,13 +329,12 @@ async function viewProdotto(idParam) {
 
   shell(`
     <div class="page-head"><div><h1>${isNew ? 'Nuovo prodotto' : esc(prodotto.nome)}</h1>
-      <span class="muted">${isNew ? 'L\'ID progressivo verrà assegnato al salvataggio.' : `ID prodotto ${id}`}</span></div></div>
+      <span class="muted">${isNew ? 'L\'ID progressivo verrà assegnato al salvataggio.' : `ID prodotto ${id}`}</span></div><a class="btn" href="#/prodotti">Chiudi</a></div>
     <form class="card" id="form-prodotto">
       <h2>Dati prodotto</h2>
       <div class="field"><label for="nome">Nome *</label><input id="nome" required maxlength="200" value="${esc(prodotto.nome)}"></div>
       <div class="field"><label for="descrizione">Descrizione</label><textarea id="descrizione">${esc(prodotto.descrizione)}</textarea></div>
       <div class="field"><label class="check"><input type="checkbox" id="attivo" ${prodotto.attivo ? 'checked' : ''}> Attivo nel catalogo</label></div>
-      <button class="primary">${isNew ? 'Crea prodotto' : 'Salva dati'}</button> <a class="btn" href="#/prodotti">${isNew ? 'Annulla' : 'Chiudi'}</a>
     </form>
     ${isNew ? '<p class="muted">Dopo la creazione potrai definire misure e attributi.</p>' : `
     <section class="card"><h2>Misure e GLB (terne larghezza / altezza / profondità)</h2>
@@ -336,7 +345,7 @@ async function viewProdotto(idParam) {
       ${assegnati.length ? assegnati.map(attrBlock).join('') : '<p class="muted">Nessun attributo assegnato.</p>'}
       <div class="row"><div><label for="nuovo-attr">Aggiungi attributo</label><select id="nuovo-attr">
         <option value="">— seleziona —</option>${assegnabili.map((a) => `<option value="${a.id_attributo}">${esc(a.nome)} (${esc(a.tipo_attributo)})</option>`).join('')}</select></div>
-        <div class="shrink"><button id="add-attr">Assegna</button></div></div></section>
+        </div><p class="muted">L'attributo selezionato viene assegnato al salvataggio.</p></section>
     <section class="card"><h2>Mappatura mesh</h2>
       <p class="muted">Ogni GLB ha la propria mappatura, indipendente dagli altri GLB del prodotto.</p>
       ${meshMappingSection()}</section>
@@ -349,53 +358,88 @@ async function viewProdotto(idParam) {
           <p class="preview-status muted" id="preview-status" role="status">Caricamento del modello…</p>
         </div>
         <div class="preview-attributes"><h3>Attributi del GLB</h3><div id="preview-attributes">${previewAttributesMarkup(previewMeasures[0].id_misura)}</div></div></div>`
-      : '<p class="empty">Associa un GLB a una misura per avviare la prova.</p>'}</section>`}`,
+      : '<p class="empty">Associa un GLB a una misura per avviare la prova.</p>'}</section>`}
+    ${saveBar(isNew ? 'Crea prodotto' : 'Salva tutto')}`,
     [['Anagrafica prodotti', '#/prodotti'], [isNew ? 'Nuovo prodotto' : `Prodotto ${id}`]]);
 
-  $('#form-prodotto').onsubmit = async (e) => {
-    e.preventDefault();
+  const originalMappings = { ...meshMappingsById };
+  let createdId = null;
+
+  const saveProduct = async () => {
     const rec = { nome: $('#nome').value.trim(), descrizione: $('#descrizione').value.trim() || null, attivo: $('#attivo').checked };
-    if (!rec.nome) return toast('Il nome è obbligatorio', true);
+    if (!rec.nome) throw new Error('Il nome è obbligatorio');
     if (isNew) {
-      try {
-        const created = await q(sb.from('prodotti').insert(rec).select('id_prodotto').single());
-        toast('Prodotto creato');
-        go(`#/prodotti/${created.id_prodotto}`);
-      } catch (err) { toast(errMsg(err), true); }
-    } else if (await act(() => q(sb.from('prodotti').update(rec).eq('id_prodotto', id)), 'Dati salvati')) {
-      $('h1').textContent = rec.nome;
+      createdId = (await q(sb.from('prodotti').insert(rec).select('id_prodotto').single())).id_prodotto;
+      return;
+    }
+
+    const measureOps = $$('#misure tr').flatMap((tr) => {
+      const mid = tr.dataset.misura;
+      const rec = { dim_x: num($('[data-f=dim_x]', tr).value), dim_y: num($('[data-f=dim_y]', tr).value), dim_z: num($('[data-f=dim_z]', tr).value), unita_misura: $('[data-f=unita_misura]', tr).value, id_glb: num(tr.dataset.glb) };
+      const dims = [rec.dim_x, rec.dim_y, rec.dim_z];
+      if (mid === 'new' && dims.every((v) => v == null) && !rec.id_glb) return [];
+      if (dims.some((v) => v == null || v <= 0)) throw new Error('Inserire tre dimensioni maggiori di zero per ogni misura');
+      return [mid === 'new' ? () => q(sb.from('misure').insert({ ...rec, id_prodotto: id })) : () => q(sb.from('misure').update(rec).eq('id_misura', mid))];
+    });
+
+    const mappingChanges = [...new Set([...Object.keys(originalMappings), ...Object.keys(meshMappingsById)])]
+      .filter((meshId) => (originalMappings[meshId] ?? null) !== (meshMappingsById[meshId] ?? null));
+    const mappingRows = mappingChanges.filter((meshId) => meshMappingsById[meshId]).map((meshId) => {
+      const attribute = assegnati.find((item) => item.id_attributo === meshMappingsById[meshId]);
+      if (!attribute) throw new Error('Un attributo mappato non è più assegnato al prodotto.');
+      return { id_prodotto: id, id_mesh: Number(meshId), id_attributo: attribute.id_attributo, ruolo: attribute.attributi.tipo_attributo };
+    });
+
+    await q(sb.from('prodotti').update(rec).eq('id_prodotto', id));
+    for (const op of measureOps) await op();
+
+    for (const block of $$('.attr-block')) {
+      const aid = Number(block.dataset.attr);
+      const wanted = $$('[data-opt]:checked', block).map((c) => Number(c.dataset.opt));
+      const had = configs.filter((c) => c.id_attributo === aid).map((c) => c.id_opzione);
+      const toDel = had.filter((o) => !wanted.includes(o));
+      const toAdd = wanted.filter((o) => !had.includes(o));
+      if (toDel.length) await q(sb.from('configurazioni').delete().eq('id_prodotto', id).eq('id_attributo', aid).in('id_opzione', toDel));
+      if (toAdd.length) await q(sb.from('configurazioni').insert(toAdd.map((o) => ({ id_prodotto: id, id_attributo: aid, id_opzione: o }))));
+      await q(sb.from('prodotti_attributi').update({
+        id_opzione_default: num($('[data-f=default]', block).value), ordine: num($('[data-f=ordine]', block).value) ?? 0, obbligatorio: $('[data-f=obbligatorio]', block).checked,
+      }).eq('id_prodotto', id).eq('id_attributo', aid));
+    }
+
+    const newAttribute = num($('#nuovo-attr').value);
+    if (newAttribute) {
+      const ordine = assegnati.length ? Math.max(...assegnati.map((a) => a.ordine)) + 1 : 0;
+      await q(sb.from('prodotti_attributi').insert({ id_prodotto: id, id_attributo: newAttribute, ordine }));
+    }
+
+    if (mappingChanges.length) {
+      await q(sb.from('associazioni_mesh').delete().eq('id_prodotto', id).in('id_mesh', mappingChanges.map(Number)));
+      if (mappingRows.length) await q(sb.from('associazioni_mesh').insert(mappingRows));
     }
   };
+  const reload = () => viewProdotto(String(id ?? createdId));
+  bindSaveAll(saveProduct, () => (isNew ? go(`#/prodotti/${createdId}`) : reload()));
+  $('#form-prodotto').onsubmit = (e) => { e.preventDefault(); $('#save-all').click(); };
   if (isNew) return;
-
-  const reload = () => viewProdotto(String(id));
 
   const uploadMeasureGlb = async (input) => {
     const file = input.files[0];
     if (!file) return;
     const tr = input.closest('tr');
-    const mid = tr.dataset.misura;
     const status = $('[data-upload-status]', tr);
     input.disabled = true;
     status.textContent = 'Caricamento…';
-    const uploaded = await act(async () => {
-      const resource = await uploadGlbResource(file, 'Oggetto', `${id}/oggetti/${mid}`);
-      try {
-        await q(sb.from('misure').update({ id_glb: resource.id_glb }).eq('id_misura', mid));
-      } catch (error) {
-        const { error: resourceCleanupError } = await sb.from('risorse_glb').delete().eq('id_glb', resource.id_glb);
-        const { error: storageCleanupError } = await sb.storage.from('modelli-glb').remove([resource.path]);
-        const cleanupErrors = [resourceCleanupError, storageCleanupError].filter(Boolean).map(errMsg);
-        if (cleanupErrors.length) throw new Error(`${errMsg(error)} (pulizia non riuscita: ${cleanupErrors.join('; ')})`);
-        throw error;
-      }
-    }, 'GLB caricato e associato alla misura');
-    if (uploaded) reload();
-    else {
-      input.disabled = false;
-      input.value = '';
+    try {
+      const resource = await uploadGlbResource(file, 'Oggetto', `${id}/oggetti/${tr.dataset.misura}`);
+      tr.dataset.glb = resource.id_glb;
+      $('[data-glb-name]', tr).innerHTML = `<span class="chip">${esc(file.name)}</span>`;
+      status.textContent = 'Caricato: premi Salva tutto per associarlo';
+    } catch (error) {
       status.textContent = '';
+      toast(errMsg(error), true);
     }
+    input.disabled = false;
+    input.value = '';
   };
 
   $('#misure').addEventListener('change', (e) => {
@@ -408,38 +452,15 @@ async function viewProdotto(idParam) {
     const tr = e.target.closest('tr');
     const mid = tr.dataset.misura;
     if (action === 'clear-glb') {
-      if (!confirm('Rimuovere il GLB associato a questa misura?')) return;
-      if (await act(() => q(sb.from('misure').update({ id_glb: null }).eq('id_misura', mid)), 'Associazione GLB rimossa')) reload();
+      tr.dataset.glb = '';
+      $('[data-glb-name]', tr).innerHTML = '<span class="muted">Nessun GLB</span>';
+      $('[data-upload-status]', tr).textContent = 'Rimosso: premi Salva tutto per confermare';
       return;
     }
     if (action === 'del') {
       if (!confirm('Eliminare la misura e le combinazioni commerciali collegate?')) return;
       if (await act(() => q(sb.from('misure').delete().eq('id_misura', mid)), 'Misura eliminata')) reload();
-      return;
     }
-    const rec = { dim_x: num($('[data-f=dim_x]', tr).value), dim_y: num($('[data-f=dim_y]', tr).value), dim_z: num($('[data-f=dim_z]', tr).value), unita_misura: $('[data-f=unita_misura]', tr).value };
-    if ([rec.dim_x, rec.dim_y, rec.dim_z].some((v) => v == null || v <= 0)) return toast('Inserire tre dimensioni maggiori di zero', true);
-    const op = action === 'add' ? sb.from('misure').insert({ ...rec, id_prodotto: id }) : sb.from('misure').update(rec).eq('id_misura', mid);
-    if (await act(() => q(op), 'Misura salvata')) reload();
-  };
-
-  const saveMeshMapping = async (measureId, container) => {
-    const measure = previewMeasures.find((item) => String(item.id_misura) === String(measureId));
-    if (!measure) return;
-    const meshes = meshesForMeasure(measureId);
-    const selected = [...container.querySelectorAll('[data-mesh-map]')].map((select) => {
-      const meshId = Number(select.closest('[data-mesh-id]').dataset.meshId);
-      const attributeId = num(select.value);
-      const attribute = assegnati.find((item) => item.id_attributo === attributeId);
-      if (!attributeId) return null;
-      if (!attribute) throw new Error('Un attributo selezionato non è più assegnato al prodotto.');
-      return { id_prodotto: id, id_mesh: meshId, id_attributo: attributeId, ruolo: attribute.attributi.tipo_attributo };
-    }).filter(Boolean);
-    if (await act(async () => {
-      const meshIds = meshes.map((mesh) => mesh.id_mesh);
-      if (meshIds.length) await q(sb.from('associazioni_mesh').delete().eq('id_prodotto', id).in('id_mesh', meshIds));
-      if (selected.length) await q(sb.from('associazioni_mesh').insert(selected));
-    }, 'Mappatura della misura salvata')) reload();
   };
 
   const bindMeshMapping = () => {
@@ -448,24 +469,22 @@ async function viewProdotto(idParam) {
     if (!selector || !container) return;
     const draw = () => {
       const rows = meshesForMeasure(selector.value);
-      container.innerHTML = `${rows.length ? `<div class="table-scroll"><table><thead><tr><th>Mesh</th><th>Percorso</th><th>Materiale originale</th><th>Attributo</th></tr></thead><tbody>
+      container.innerHTML = rows.length ? `<div class="table-scroll"><table><thead><tr><th>Mesh</th><th>Percorso</th><th>Materiale originale</th><th>Attributo</th></tr></thead><tbody>
         ${rows.map((mesh) => `<tr data-mesh-id="${mesh.id_mesh}"><td>${esc(mesh.nome_mesh)}</td><td><code>${esc(mesh.percorso_nodo)}</code></td><td>${esc(mesh.materiale_base || '—')}</td>
           <td><select data-mesh-map><option value="">— non mappata —</option>${assegnati.map((pa) => `<option value="${pa.id_attributo}" ${String(meshMappingsById[mesh.id_mesh] || '') === String(pa.id_attributo) ? 'selected' : ''}>${esc(pa.attributi.nome)} (${esc(pa.attributi.tipo_attributo)})</option>`).join('')}</select></td></tr>`).join('')}
-        </tbody></table></div>` : '<p class="empty">Nessuna mesh nel GLB di questa misura.</p>'}
-        <button class="primary" id="save-mesh-map">Salva mappatura di questa misura</button>`;
-      $('#save-mesh-map', container).onclick = () => saveMeshMapping(selector.value, container);
+        </tbody></table></div>` : '<p class="empty">Nessuna mesh nel GLB di questa misura.</p>';
     };
+    container.addEventListener('change', (e) => {
+      if (!e.target.matches('[data-mesh-map]')) return;
+      const meshId = e.target.closest('[data-mesh-id]').dataset.meshId;
+      const attributeId = num(e.target.value);
+      if (attributeId) meshMappingsById[meshId] = attributeId;
+      else delete meshMappingsById[meshId];
+    });
     selector.onchange = draw;
     draw();
   };
   bindMeshMapping();
-
-  $('#add-attr').onclick = async () => {
-    const aid = num($('#nuovo-attr').value);
-    if (!aid) return toast('Seleziona un attributo', true);
-    const ordine = assegnati.length ? Math.max(...assegnati.map((a) => a.ordine)) + 1 : 0;
-    if (await act(() => q(sb.from('prodotti_attributi').insert({ id_prodotto: id, id_attributo: aid, ordine })), 'Attributo assegnato')) reload();
-  };
 
   $$('.attr-block').forEach((block) => {
     const aid = Number(block.dataset.attr);
@@ -479,26 +498,9 @@ async function viewProdotto(idParam) {
       def.value = checked.includes(current) ? current : '';
     });
     block.onclick = async (e) => {
-      const action = e.target.dataset.act;
-      if (action === 'remove') {
-        if (!confirm('Rimuovere l\'attributo dal prodotto (e le relative opzioni ammesse)?')) return;
-        if (await act(() => q(sb.from('prodotti_attributi').delete().eq('id_prodotto', id).eq('id_attributo', aid)), 'Attributo rimosso')) reload();
-      }
-      if (action === 'save') {
-        const wanted = $$('[data-opt]:checked', block).map((c) => Number(c.dataset.opt));
-        const had = configs.filter((c) => c.id_attributo === aid).map((c) => c.id_opzione);
-        const toDel = had.filter((o) => !wanted.includes(o));
-        const toAdd = wanted.filter((o) => !had.includes(o));
-        const def = num($('[data-f=default]', block).value);
-        const ok = await act(async () => {
-          if (toDel.length) await q(sb.from('configurazioni').delete().eq('id_prodotto', id).eq('id_attributo', aid).in('id_opzione', toDel));
-          if (toAdd.length) await q(sb.from('configurazioni').insert(toAdd.map((o) => ({ id_prodotto: id, id_attributo: aid, id_opzione: o }))));
-          await q(sb.from('prodotti_attributi').update({
-            id_opzione_default: def, ordine: num($('[data-f=ordine]', block).value) ?? 0, obbligatorio: $('[data-f=obbligatorio]', block).checked,
-          }).eq('id_prodotto', id).eq('id_attributo', aid));
-        }, 'Attributo salvato');
-        if (ok) reload();
-      }
+      if (e.target.dataset.act !== 'remove') return;
+      if (!confirm('Rimuovere l\'attributo dal prodotto (e le relative opzioni ammesse)?')) return;
+      if (await act(() => q(sb.from('prodotti_attributi').delete().eq('id_prodotto', id).eq('id_attributo', aid)), 'Attributo rimosso')) reload();
     };
   });
 
@@ -679,7 +681,7 @@ async function viewAttributo(idParam) {
       <td>${effetto(o)}</td>
       <td style="width:80px"><input type="number" data-f="ordine" value="${o ? o.ordine : next}" aria-label="Ordine"></td>
       <td><input type="checkbox" data-f="attiva" ${!o || o.attiva ? 'checked' : ''} aria-label="Attiva"></td>
-      <td class="actions">${o ? '<button class="small" data-act="save">Salva</button> <button class="small danger" data-act="del">Elimina</button>' : '<button class="small primary" data-act="add">Aggiungi</button>'}</td></tr>`;
+      <td class="actions">${o ? '<button class="small danger" type="button" data-act="del">Elimina</button>' : ''}</td></tr>`;
 
   const abilitate = new Set(esposte.filter((e) => e.abilitata).map((e) => e.id_opzione));
   const nextOrdine = opzioni.length ? Math.max(...opzioni.map((o) => o.ordine)) + 1 : 0;
@@ -688,7 +690,7 @@ async function viewAttributo(idParam) {
     <section class="card"><h2>Opzioni del derivato</h2>
       <p class="muted">Seleziona le opzioni dell'attributo padre da includere in questo attributo.</p>
       <div class="opt-grid">${padreOpzioni.map((o) => `<label class="check"><input type="checkbox" data-opt="${o.id_opzione}" ${abilitate.has(o.id_opzione) ? 'checked' : ''}> ${esc(o.nome)}${o.attiva ? '' : ' <span class="muted">(non attiva)</span>'}</label>`).join('') || '<span class="muted">L\'attributo padre non ha opzioni.</span>'}</div>
-      <button class="primary" id="save-sub">Salva selezione</button></section>` : `
+</section>` : `
     <section class="card"><h2>Opzioni</h2>
       <div class="table-scroll"><table><thead><tr><th>Nome</th><th>Descrizione</th><th>${attr.tipo_attributo === 'Materiale' ? 'Materiale' : 'Visibilità'}</th><th>Ordine</th><th>Attiva</th><th></th></tr></thead>
       <tbody id="opzioni">${opzioni.map((o) => opzioneRow(o)).join('')}${opzioneRow(null, nextOrdine)}</tbody></table></div>
@@ -697,7 +699,7 @@ async function viewAttributo(idParam) {
 
   shell(`
     <div class="page-head"><div><h1>${isNew ? 'Nuovo attributo' : esc(attr.nome)}</h1>
-      <span class="muted">${derivato ? 'Attributo derivato' : 'Attributo generale'}</span></div></div>
+      <span class="muted">${derivato ? 'Attributo derivato' : 'Attributo generale'}</span></div><a class="btn" href="#/attributi">Chiudi</a></div>
     <form class="card" id="form-attr">
       <h2>Dati attributo</h2>
       <div class="row">
@@ -710,8 +712,7 @@ async function viewAttributo(idParam) {
       </div>
       <div class="field"><label for="descrizione">Descrizione</label><textarea id="descrizione">${esc(attr.descrizione)}</textarea></div>
       <div class="field"><label class="check"><input type="checkbox" id="attivo" ${attr.attivo ? 'checked' : ''}> Attivo</label></div>
-      <button class="primary">${isNew ? 'Crea attributo' : 'Salva dati'}</button> <a class="btn" href="#/attributi">${isNew ? 'Annulla' : 'Chiudi'}</a>
-    </form>${opzioniSection}`, crumbs);
+    </form>${opzioniSection}${saveBar(isNew ? 'Crea attributo' : 'Salva tutto')}`, crumbs);
 
   // un derivato ha il tipo del padre
   $('#padre').onchange = () => {
@@ -720,64 +721,56 @@ async function viewAttributo(idParam) {
     $('#tipo').disabled = !!t || !isNew;
   };
 
-  $('#form-attr').onsubmit = async (e) => {
-    e.preventDefault();
+  let createdId = null;
+  const saveAttribute = async () => {
     const rec = { nome: $('#nome').value.trim(), descrizione: $('#descrizione').value.trim() || null, attivo: $('#attivo').checked };
-    if (!rec.nome) return toast('Il nome è obbligatorio', true);
+    if (!rec.nome) throw new Error('Il nome è obbligatorio');
     if (isNew) {
       rec.tipo_attributo = $('#tipo').value;
       rec.id_attributo_padre = num($('#padre').value);
-      try {
-        const created = await q(sb.from('attributi').insert(rec).select('id_attributo').single());
-        toast('Attributo creato');
-        go(`#/attributi/${created.id_attributo}`);
-      } catch (err) { toast(errMsg(err), true); }
-    } else if (await act(() => q(sb.from('attributi').update(rec).eq('id_attributo', id)), 'Dati salvati')) {
-      $('h1').textContent = rec.nome;
+      createdId = (await q(sb.from('attributi').insert(rec).select('id_attributo').single())).id_attributo;
+      return;
     }
-  };
-  if (isNew) return;
-  const reload = () => viewAttributo(String(id));
 
-  if (derivato) {
-    $('#save-sub').onclick = async () => {
+    const optionOps = derivato ? [] : $$('#opzioni tr').flatMap((tr) => {
+      const oid = tr.dataset.opz;
+      const f = (n) => $(`[data-f=${n}]`, tr);
+      const opt = { nome: f('nome').value.trim(), descrizione: f('descrizione').value.trim() || null, ordine: num(f('ordine').value) ?? 0, attiva: f('attiva').checked };
+      if (oid === 'new' && !opt.nome && !f('descrizione').value.trim()) return [];
+      if (!opt.nome) throw new Error('Il nome dell\'opzione è obbligatorio');
+      if (attr.tipo_attributo === 'Materiale') opt.id_materiale = num(f('id_materiale').value);
+      else opt.valore_visibilita = f('valore_visibilita').value === '' ? null : f('valore_visibilita').value === 'true';
+      return [oid === 'new' ? () => q(sb.from('opzioni').insert({ ...opt, id_attributo: id })) : () => q(sb.from('opzioni').update(opt).eq('id_opzione', oid))];
+    });
+
+    await q(sb.from('attributi').update(rec).eq('id_attributo', id));
+    for (const op of optionOps) await op();
+
+    if (derivato) {
       const wanted = $$('[data-opt]:checked').map((c) => Number(c.dataset.opt));
       const known = new Set(esposte.map((x) => x.id_opzione));
       const toRemove = [...known].filter((o) => !wanted.includes(o));
       const toAdd = wanted.filter((o) => !known.has(o));
-      const ok = await act(async () => {
-        if (toRemove.length) await q(sb.from('attributi_opzioni').delete().eq('id_attributo', id).in('id_opzione', toRemove));
-        if (toAdd.length) await q(sb.from('attributi_opzioni').insert(toAdd.map((o) => ({ id_attributo: id, id_opzione: o }))));
-      }, 'Selezione salvata');
-      if (ok) reload();
-    };
-    return;
-  }
+      if (toRemove.length) await q(sb.from('attributi_opzioni').delete().eq('id_attributo', id).in('id_opzione', toRemove));
+      if (toAdd.length) await q(sb.from('attributi_opzioni').insert(toAdd.map((o) => ({ id_attributo: id, id_opzione: o }))));
+    }
+  };
+  const reload = () => viewAttributo(String(id ?? createdId));
+  bindSaveAll(saveAttribute, () => (isNew ? go(`#/attributi/${createdId}`) : reload()));
+  $('#form-attr').onsubmit = (e) => { e.preventDefault(); $('#save-all').click(); };
+  if (isNew || derivato) return;
 
   $('#opzioni').onclick = async (e) => {
-    const action = e.target.dataset.act;
-    if (!action) return;
-    const tr = e.target.closest('tr');
-    const oid = tr.dataset.opz;
-    if (action === 'del') {
-      if (!confirm('Eliminare l\'opzione? Verrà tolta anche da attributi derivati e prodotti che la usano.')) return;
-      if (await act(() => q(sb.from('opzioni').delete().eq('id_opzione', oid)), 'Opzione eliminata')) reload();
-      return;
-    }
-    const f = (n) => $(`[data-f=${n}]`, tr);
-    const rec = { nome: f('nome').value.trim(), descrizione: f('descrizione').value.trim() || null, ordine: num(f('ordine').value) ?? 0, attiva: f('attiva').checked };
-    if (!rec.nome) return toast('Il nome dell\'opzione è obbligatorio', true);
-    if (attr.tipo_attributo === 'Materiale') rec.id_materiale = num(f('id_materiale').value);
-    else rec.valore_visibilita = f('valore_visibilita').value === '' ? null : f('valore_visibilita').value === 'true';
-    const op = action === 'add' ? sb.from('opzioni').insert({ ...rec, id_attributo: id }) : sb.from('opzioni').update(rec).eq('id_opzione', oid);
-    if (await act(() => q(op), 'Opzione salvata')) reload();
+    if (e.target.dataset.act !== 'del') return;
+    const oid = e.target.closest('tr').dataset.opz;
+    if (!confirm('Eliminare l\'opzione? Verrà tolta anche da attributi derivati e prodotti che la usano.')) return;
+    if (await act(() => q(sb.from('opzioni').delete().eq('id_opzione', oid)), 'Opzione eliminata')) reload();
   };
-
 }
 
 // ---------- materiali ----------
 async function viewMateriali(idParam) {
-  const isNew = idParam === 'nuovo';
+  const focusNew = idParam === 'nuovo';
   shell('<div class="empty">Caricamento…</div>', [['Anagrafica materiali']]);
   const [materiali, risorse] = await Promise.all([
     q(sb.from('materiali').select('*').order('nome')),
@@ -786,91 +779,79 @@ async function viewMateriali(idParam) {
   const resourceOptions = (selectedId) => `<option value="">— nessun GLB —</option>${risorse.map((resource) =>
     `<option value="${resource.id_glb}" ${String(resource.id_glb) === String(selectedId || '') ? 'selected' : ''}>${esc(resource.nome_file)}</option>`).join('')}`;
   const materialRow = (material) => `<tr data-material="${material?.id_materiale ?? 'new'}">
-    <td><input data-f="nome" maxlength="150" value="${esc(material?.nome)}" placeholder="Nome materiale" aria-label="Nome materiale"></td>
+    <td><input data-f="nome" maxlength="150" value="${esc(material?.nome)}" placeholder="${material ? 'Nome materiale' : 'Nuovo materiale: nome'}" aria-label="Nome materiale"></td>
     <td><input data-f="descrizione" value="${esc(material?.descrizione)}" placeholder="Descrizione" aria-label="Descrizione"></td>
     <td><input data-f="rif" maxlength="200" value="${esc(material?.rif_materiale_interno)}" placeholder="Riferimento interno" aria-label="Riferimento interno"></td>
     <td><select data-f="glb" aria-label="GLB del materiale">${resourceOptions(material?.id_glb)}</select>
       <label class="upload-button small">Carica GLB<input type="file" data-f="file" accept=".glb,model/gltf-binary" aria-label="Carica GLB materiale"></label>
       <span class="upload-status muted" data-upload-status></span></td>
-    <td class="actions"><button class="small primary" data-act="save">${material ? 'Salva' : 'Crea'}</button>
-      ${material ? `<button class="small danger" data-act="delete">Elimina</button>` : ''}</td></tr>`;
+    <td class="actions">${material ? '<button class="small danger" type="button" data-act="delete">Elimina</button>' : ''}</td></tr>`;
 
   shell(`
     <div class="page-head"><div><h1>Anagrafica materiali</h1><span class="muted">${materiali.length} materiali · associa un GLB dedicato a ciascun materiale</span></div>
-      <a class="btn primary shrink" href="#/materiali/nuovo">+ Nuovo materiale</a></div>
+      <button class="btn primary shrink" type="button" id="new-material">+ Nuovo materiale</button></div>
     <section class="card table-scroll"><table><thead><tr><th>Nome</th><th>Descrizione</th><th>Riferimento interno</th><th>GLB</th><th></th></tr></thead>
-      <tbody id="materials">${materiali.map(materialRow).join('')}${isNew ? materialRow(null) : ''}</tbody></table></section>
-    <p class="muted">Il file caricato viene archiviato in Supabase Storage; il GLB può essere sostituito scegliendone uno nuovo oppure rimosso selezionando “nessun GLB”.</p>`,
+      <tbody id="materials">${materiali.map(materialRow).join('')}${materialRow(null)}</tbody></table></section>
+    <p class="muted">L'ultima riga vuota serve per creare un nuovo materiale. Il file caricato viene archiviato in Supabase Storage; per sostituirlo carica un nuovo GLB, per rimuoverlo scegli “nessun GLB”.</p>
+    ${saveBar()}`,
   [['Anagrafica materiali']]);
 
+  const newRow = $('#materials tr[data-material=new]');
+  const focusNewRow = () => {
+    newRow.scrollIntoView({ block: 'center' });
+    $('[data-f=nome]', newRow).focus();
+  };
+  $('#new-material').onclick = focusNewRow;
+  if (focusNew) focusNewRow();
+
   const uploadMaterialGlb = async (input) => {
-    const row = input.closest('tr');
-    const materialId = row.dataset.material;
-    const nome = $('[data-f=nome]', row).value.trim();
-    if (!nome) {
-      input.value = '';
-      return toast('Inserisci prima il nome del materiale.', true);
-    }
     const file = input.files[0];
     if (!file) return;
+    const row = input.closest('tr');
+    const materialId = row.dataset.material;
     const status = $('[data-upload-status]', row);
     input.disabled = true;
     status.textContent = 'Caricamento…';
-    const result = await act(async () => {
+    try {
       const uploaded = await uploadGlbResource(file, 'Materiale', `materiali/${materialId === 'new' ? crypto.randomUUID() : materialId}`);
-      const rec = {
-        nome,
-        descrizione: $('[data-f=descrizione]', row).value.trim() || null,
-        rif_materiale_interno: $('[data-f=rif]', row).value.trim() || null,
-        id_glb: uploaded.id_glb,
-      };
-      try {
-        if (materialId === 'new') await q(sb.from('materiali').insert(rec));
-        else await q(sb.from('materiali').update(rec).eq('id_materiale', materialId));
-      } catch (error) {
-        const { error: resourceCleanupError } = await sb.from('risorse_glb').delete().eq('id_glb', uploaded.id_glb);
-        const { error: storageCleanupError } = await sb.storage.from('modelli-glb').remove([uploaded.path]);
-        const cleanupErrors = [resourceCleanupError, storageCleanupError].filter(Boolean).map(errMsg);
-        if (cleanupErrors.length) throw new Error(`${errMsg(error)} (pulizia non riuscita: ${cleanupErrors.join('; ')})`);
-        throw error;
-      }
-    }, materialId === 'new' ? 'Materiale creato e GLB caricato' : 'Materiale aggiornato con il nuovo GLB');
-    if (result) viewMateriali();
-    else {
-      input.disabled = false;
-      input.value = '';
+      const select = $('[data-f=glb]', row);
+      select.add(new Option(file.name, uploaded.id_glb, true, true));
+      status.textContent = 'Caricato: premi Salva tutto per associarlo';
+    } catch (error) {
       status.textContent = '';
+      toast(errMsg(error), true);
     }
+    input.disabled = false;
+    input.value = '';
   };
   $('#materials').addEventListener('change', (event) => {
     if (event.target.matches('[data-f=file]')) uploadMaterialGlb(event.target);
   });
 
   $('#materials').onclick = async (event) => {
-    const action = event.target.dataset.act;
-    if (!action) return;
-    const row = event.target.closest('tr');
-    const materialId = row.dataset.material;
-    if (action === 'delete') {
-      const material = materiali.find((item) => String(item.id_materiale) === materialId);
-      if (!confirm(`Eliminare il materiale "${material.nome}"? Le opzioni collegate resteranno senza materiale.`)) return;
-      if (await act(() => q(sb.from('materiali').delete().eq('id_materiale', materialId)), 'Materiale eliminato')) viewMateriali();
-      return;
-    }
-
-    const nome = $('[data-f=nome]', row).value.trim();
-    if (!nome) return toast('Il nome del materiale è obbligatorio.', true);
-    const rec = {
-      nome,
-      descrizione: $('[data-f=descrizione]', row).value.trim() || null,
-      rif_materiale_interno: $('[data-f=rif]', row).value.trim() || null,
-      id_glb: num($('[data-f=glb]', row).value),
-    };
-    const operation = materialId === 'new'
-      ? sb.from('materiali').insert(rec)
-      : sb.from('materiali').update(rec).eq('id_materiale', materialId);
-    if (await act(() => q(operation), materialId === 'new' ? 'Materiale creato' : 'Materiale salvato')) viewMateriali();
+    if (event.target.dataset.act !== 'delete') return;
+    const materialId = event.target.closest('tr').dataset.material;
+    const material = materiali.find((item) => String(item.id_materiale) === materialId);
+    if (!confirm(`Eliminare il materiale "${material.nome}"? Le opzioni collegate resteranno senza materiale.`)) return;
+    if (await act(() => q(sb.from('materiali').delete().eq('id_materiale', materialId)), 'Materiale eliminato')) viewMateriali();
   };
+
+  const saveMaterials = async () => {
+    const ops = $$('#materials tr').flatMap((row) => {
+      const materialId = row.dataset.material;
+      const rec = {
+        nome: $('[data-f=nome]', row).value.trim(),
+        descrizione: $('[data-f=descrizione]', row).value.trim() || null,
+        rif_materiale_interno: $('[data-f=rif]', row).value.trim() || null,
+        id_glb: num($('[data-f=glb]', row).value),
+      };
+      if (materialId === 'new' && !rec.nome && !rec.descrizione && !rec.rif_materiale_interno && !rec.id_glb) return [];
+      if (!rec.nome) throw new Error('Il nome del materiale è obbligatorio.');
+      return [materialId === 'new' ? () => q(sb.from('materiali').insert(rec)) : () => q(sb.from('materiali').update(rec).eq('id_materiale', materialId))];
+    });
+    for (const op of ops) await op();
+  };
+  bindSaveAll(saveMaterials, () => (location.hash === '#/materiali/nuovo' ? go('#/materiali') : viewMateriali()));
 }
 
 // ---------- routing ----------

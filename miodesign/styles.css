@@ -86,3 +86,5 @@ td.actions { white-space: nowrap; text-align: right; }
   .product-preview-grid { grid-template-columns: 1fr; }
   .product-preview-stage { height: 55vh; min-height: 280px; }
 }
+
+.save-bar { position: sticky; bottom: 0; z-index: 5; display: flex; justify-content: flex-end; align-items: center; gap: 1rem; margin-top: 1rem; padding: .75rem 1rem; background: var(--card-raised); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 -4px 16px rgba(0, 0, 0, .35); }

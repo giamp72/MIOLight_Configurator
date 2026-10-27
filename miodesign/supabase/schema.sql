@@ -307,3 +307,17 @@ begin
     execute format('create policy "autenticati" on %I for all to authenticated using (true) with check (true)', t);
   end loop;
 end $$;
+
+-- Archivio privato dei GLB; i client autenticati possono gestire i file.
+insert into storage.buckets (id, name, public)
+values ('modelli-glb', 'modelli-glb', false)
+on conflict (id) do nothing;
+
+create policy "autenticati_glb_select" on storage.objects
+  for select to authenticated using (bucket_id = 'modelli-glb');
+create policy "autenticati_glb_insert" on storage.objects
+  for insert to authenticated with check (bucket_id = 'modelli-glb');
+create policy "autenticati_glb_update" on storage.objects
+  for update to authenticated using (bucket_id = 'modelli-glb') with check (bucket_id = 'modelli-glb');
+create policy "autenticati_glb_delete" on storage.objects
+  for delete to authenticated using (bucket_id = 'modelli-glb');

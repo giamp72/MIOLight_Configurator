@@ -64,6 +64,8 @@ export function createProductPreview(stage) {
   const materialCache = new Map();
   const materialInstances = new Set();
   const materialGltfs = [];
+  let configurationEntries = [];
+  let highlightedPath = null;
 
   const fitCamera = () => {
     if (!model) return;
@@ -100,6 +102,42 @@ export function createProductPreview(stage) {
   };
   animate();
 
+  const applyConfiguration = (entries) => {
+    if (!model) return;
+    configurationEntries = entries;
+    for (const [object, material] of originalMaterials) object.material = material;
+    for (const [object, visible] of originalVisibility) object.visible = visible;
+    for (const material of appliedMaterials) material.dispose();
+    appliedMaterials.clear();
+
+    const byPath = new Map(entries.map((entry) => [entry.path, entry]));
+    model.traverse((object) => {
+      if (!object.isMesh) return;
+      const association = modelGltf.parser.associations.get(object);
+      const path = association?.nodes == null ? null : modelGltf.userData.nodePaths.get(association.nodes);
+      const entry = path ? byPath.get(path) : null;
+      if (entry?.material) {
+        const material = entry.material.clone();
+        appliedMaterials.add(material);
+        object.material = material;
+      }
+      if (typeof entry?.visible === 'boolean') object.visible = entry.visible;
+      if (path !== highlightedPath) return;
+      const materials = Array.isArray(object.material) ? object.material : [object.material];
+      const highlighted = materials.map((source) => {
+        const material = source.clone();
+        if (material.color) material.color.lerp(new THREE.Color('#a855f7'), 0.65);
+        if (material.emissive) {
+          material.emissive.set('#7e22ce');
+          material.emissiveIntensity = Math.max(material.emissiveIntensity || 0, 0.5);
+        }
+        appliedMaterials.add(material);
+        return material;
+      });
+      object.material = Array.isArray(object.material) ? highlighted : highlighted[0];
+    });
+  };
+
   return {
     async loadProduct(url) {
       if (model) {
@@ -121,6 +159,7 @@ export function createProductPreview(stage) {
       }
       model = modelGltf.scene;
       modelGltf.userData.nodePaths = nodePaths(modelGltf.parser.json);
+      configurationEntries = [];
       model.traverse((object) => {
         if (!object.isMesh) return;
         originalMaterials.set(object, object.material);
@@ -158,29 +197,10 @@ export function createProductPreview(stage) {
         throw error;
       }
     },
-    applyConfiguration(entries) {
-      if (!model) return;
-      for (const material of appliedMaterials) material.dispose();
-      appliedMaterials.clear();
-      for (const [object, material] of originalMaterials) object.material = material;
-      for (const [object, visible] of originalVisibility) object.visible = visible;
-
-      const byPath = new Map(entries.map((entry) => [entry.path, entry]));
-      model.traverse((object) => {
-        if (!object.isMesh) return;
-        const association = modelGltf.parser.associations.get(object);
-        const path = association?.nodes == null ? null : modelGltf.userData.nodePaths.get(association.nodes);
-        const entry = path ? byPath.get(path) : null;
-        if (!entry) return;
-        if (!originalMaterials.has(object)) originalMaterials.set(object, object.material);
-        if (!originalVisibility.has(object)) originalVisibility.set(object, object.visible);
-        if (entry.material) {
-          const material = entry.material.clone();
-          appliedMaterials.add(material);
-          object.material = material;
-        }
-        if (typeof entry.visible === 'boolean') object.visible = entry.visible;
-      });
+    applyConfiguration,
+    highlight(path) {
+      highlightedPath = path;
+      applyConfiguration(configurationEntries);
     },
     dispose() {
       running = false;

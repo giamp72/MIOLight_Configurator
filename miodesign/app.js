@@ -10,6 +10,8 @@ let productPreviewToken = 0;
 
 // ---------- utilità ----------
 const esc = (v) => String(v ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const optionLabel = (option) => option.descrizione ? `${option.nome} — ${option.descrizione}` : option.nome;
+const attributeLabel = (attribute) => attribute.descrizione ? `${attribute.nome} — ${attribute.descrizione}` : attribute.nome;
 const $ = (sel, root = app) => root.querySelector(sel);
 const $$ = (sel, root = app) => [...root.querySelectorAll(sel)];
 const num = (v) => (v === '' || v == null ? null : Number(v));
@@ -279,7 +281,7 @@ async function viewProdotto(idParam) {
     prodotto = p; misure = m; assegnati = pa; configs = cf; tuttiAttributi = attrs;
     const ids = assegnati.map((a) => a.id_attributo);
     if (ids.length) {
-      const ao = await q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(id_opzione, nome, attiva, ordine, id_materiale, valore_visibilita, materiali(id_materiale, nome, id_glb, risorse_glb(percorso_risorsa)))').in('id_attributo', ids));
+      const ao = await q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(id_opzione, nome, descrizione, attiva, ordine, id_materiale, valore_visibilita, materiali(id_materiale, nome, id_glb, risorse_glb(percorso_risorsa)))').in('id_attributo', ids));
       ao.filter((r) => r.abilitata && r.opzioni).forEach((r) => (opzioniPerAttr[r.id_attributo] ||= []).push(r.opzioni));
       Object.values(opzioniPerAttr).forEach((l) => l.sort((a, b) => a.ordine - b.ordine || a.nome.localeCompare(b.nome)));
       previewOptionsByAttr = opzioniPerAttr;
@@ -311,11 +313,12 @@ async function viewProdotto(idParam) {
       <h3>${esc(pa.attributi.nome)} <span class="badge">${esc(pa.attributi.tipo_attributo)}</span></h3>
       ${pa.attributi.descrizione ? `<p class="muted">${esc(pa.attributi.descrizione)}</p>` : ''}
       <label>Opzioni ammesse per questo prodotto</label>
-      <div class="opt-grid">${opts.length ? opts.map((o) => `<label class="check"><input type="checkbox" data-opt="${o.id_opzione}" ${sel.has(o.id_opzione) ? 'checked' : ''}> ${esc(o.nome)}${o.attiva ? '' : ' <span class="muted">(non attiva)</span>'}</label>`).join('') : '<span class="muted">L\'attributo non ha opzioni.</span>'}</div>
+      <div class="opt-grid">${opts.length ? opts.map((o) => `<label class="check"><input type="checkbox" data-opt="${o.id_opzione}" ${sel.has(o.id_opzione) ? 'checked' : ''}> ${esc(optionLabel(o))}${o.attiva ? '' : ' <span class="muted">(non attiva)</span>'}</label>`).join('') : '<span class="muted">L\'attributo non ha opzioni.</span>'}</div>
       <div class="row">
-        <div><label>Default</label><select data-f="default"><option value="">— nessuno —</option>${opts.filter((o) => sel.has(o.id_opzione)).map((o) => `<option value="${o.id_opzione}" ${pa.id_opzione_default === o.id_opzione ? 'selected' : ''}>${esc(o.nome)}</option>`).join('')}</select></div>
+        <div><label>Default</label><select data-f="default"><option value="">— nessuno —</option>${opts.filter((o) => sel.has(o.id_opzione)).map((o) => `<option value="${o.id_opzione}" ${pa.id_opzione_default === o.id_opzione ? 'selected' : ''}>${esc(optionLabel(o))}</option>`).join('')}</select></div>
         <div><label>Ordine</label><input type="number" data-f="ordine" value="${pa.ordine}"></div>
         <label class="check shrink"><input type="checkbox" data-f="obbligatorio" ${pa.obbligatorio ? 'checked' : ''}> Obbligatorio</label>
+        <label class="check shrink"><input type="checkbox" data-f="codifica" ${pa.codifica !== false ? 'checked' : ''}> Codifica</label>
         <div class="shrink"><button class="small danger" type="button" data-act="remove">${btn('trash', 'Rimuovi')}</button></div>
       </div></div>`;
   };
@@ -332,7 +335,7 @@ async function viewProdotto(idParam) {
   const attributesForRole = (role) => assegnati.filter((attribute) => attribute.attributi.tipo_attributo === role);
   const meshMappingRows = (rows) => rows.length ? `<div class="table-scroll"><table><thead><tr><th>Mesh</th><th>Percorso</th><th>Materiale originale</th><th>Attributo materiale</th><th>Attributo visibilità</th><th></th></tr></thead><tbody>
     ${rows.map((mesh) => `<tr data-mesh-id="${mesh.id_mesh}"><td>${esc(mesh.nome_mesh)}</td><td><code>${esc(mesh.percorso_nodo)}</code></td><td>${esc(mesh.materiale_base || '—')}</td>
-      ${['Materiale', 'Visibilità'].map((role) => `<td><select data-mesh-map="${role}" aria-label="${role} per ${esc(mesh.nome_mesh)}"><option value="">— nessuno —</option>${attributesForRole(role).map((pa) => `<option value="${pa.id_attributo}" ${String(meshMappingsById[meshMappingKey(mesh.id_mesh, role)] || '') === String(pa.id_attributo) ? 'selected' : ''}>${esc(pa.attributi.nome)}</option>`).join('')}</select></td>`).join('')}
+      ${['Materiale', 'Visibilità'].map((role) => `<td><select data-mesh-map="${role}" aria-label="${role} per ${esc(mesh.nome_mesh)}"><option value="">— nessuno —</option>${attributesForRole(role).map((pa) => `<option value="${pa.id_attributo}" ${String(meshMappingsById[meshMappingKey(mesh.id_mesh, role)] || '') === String(pa.id_attributo) ? 'selected' : ''}>${esc(attributeLabel(pa.attributi))}</option>`).join('')}</select></td>`).join('')}
       <td><button class="small ghost" type="button" data-highlight-mesh="${esc(mesh.percorso_nodo)}">Evidenzia</button></td></tr>`).join('')}
     </tbody></table></div>` : '<p class="empty">Nessuna mesh nel GLB di questa misura.</p>';
   const meshMappingSection = () => {
@@ -354,7 +357,7 @@ async function viewProdotto(idParam) {
       return `<div class="field"><label for="preview-attr-${attributeId}">${esc(attribute.attributi.nome)}</label>
         ${attribute.attributi.descrizione ? `<p class="muted">${esc(attribute.attributi.descrizione)}</p>` : ''}
         <select id="preview-attr-${attributeId}" data-preview-attribute="${attributeId}">
-          <option value="">— seleziona —</option>${options.map((option) => `<option value="${option.id_opzione}" ${String(option.id_opzione) === String(attribute.id_opzione_default || '') ? 'selected' : ''}>${esc(option.nome)}</option>`).join('')}
+          <option value="">— seleziona —</option>${options.map((option) => `<option value="${option.id_opzione}" ${String(option.id_opzione) === String(attribute.id_opzione_default || '') ? 'selected' : ''}>${esc(optionLabel(option))}</option>`).join('')}
         </select></div>`;
     }).join('');
   };
@@ -378,7 +381,7 @@ async function viewProdotto(idParam) {
       <div id="attr-blocks">${assegnati.map(attrBlock).join('')}</div>
       <p class="muted" id="no-attr" ${assegnati.length ? 'hidden' : ''}>Nessun attributo assegnato.</p>
       <div class="row"><div><label for="nuovo-attr">Aggiungi attributo</label><select id="nuovo-attr">
-        <option value="">— seleziona —</option>${assegnabili.map((a) => `<option value="${a.id_attributo}">${esc(a.nome)} (${esc(a.tipo_attributo)})</option>`).join('')}</select></div>
+        <option value="">— seleziona —</option>${assegnabili.map((a) => `<option value="${a.id_attributo}">${esc(attributeLabel(a))} (${esc(a.tipo_attributo)})</option>`).join('')}</select></div>
         </div><p class="muted">Puoi aggiungerne quanti vuoi: tutto viene salvato con il pulsante in basso.</p></section>
     <section class="card"><h2>Mappatura mesh</h2>
       <p class="muted">Per ogni mesh puoi assegnare separatamente un attributo materiale e un attributo di visibilità. Ogni GLB ha la propria mappatura.</p>
@@ -435,14 +438,14 @@ async function viewProdotto(idParam) {
       const isPending = block.dataset.new === '1';
       const had = isPending ? [] : configs.filter((c) => c.id_attributo === aid).map((c) => c.id_opzione);
       if (isPending) {
-        await q(sb.from('prodotti_attributi').upsert({ id_prodotto: id, id_attributo: aid, ordine: num($('[data-f=ordine]', block).value) ?? 0, obbligatorio: $('[data-f=obbligatorio]', block).checked }, { onConflict: 'id_prodotto,id_attributo' }));
+        await q(sb.from('prodotti_attributi').upsert({ id_prodotto: id, id_attributo: aid, ordine: num($('[data-f=ordine]', block).value) ?? 0, obbligatorio: $('[data-f=obbligatorio]', block).checked, codifica: $('[data-f=codifica]', block).checked }, { onConflict: 'id_prodotto,id_attributo' }));
       }
       const toDel = had.filter((o) => !wanted.includes(o));
       const toAdd = wanted.filter((o) => !had.includes(o));
       if (toDel.length) await q(sb.from('configurazioni').delete().eq('id_prodotto', id).eq('id_attributo', aid).in('id_opzione', toDel));
       if (toAdd.length) await q(sb.from('configurazioni').insert(toAdd.map((o) => ({ id_prodotto: id, id_attributo: aid, id_opzione: o }))));
       await q(sb.from('prodotti_attributi').update({
-        id_opzione_default: num($('[data-f=default]', block).value), ordine: num($('[data-f=ordine]', block).value) ?? 0, obbligatorio: $('[data-f=obbligatorio]', block).checked,
+        id_opzione_default: num($('[data-f=default]', block).value), ordine: num($('[data-f=ordine]', block).value) ?? 0, obbligatorio: $('[data-f=obbligatorio]', block).checked, codifica: $('[data-f=codifica]', block).checked,
       }).eq('id_prodotto', id).eq('id_attributo', aid));
     }
 
@@ -577,11 +580,11 @@ async function viewProdotto(idParam) {
     attrSelect.disabled = true;
     try {
       const attribute = tuttiAttributi.find((a) => a.id_attributo === aid);
-      const ao = await q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(id_opzione, nome, attiva, ordine, id_materiale, valore_visibilita, materiali(id_materiale, nome, id_glb, risorse_glb(percorso_risorsa)))').eq('id_attributo', aid));
+      const ao = await q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(id_opzione, nome, descrizione, attiva, ordine, id_materiale, valore_visibilita, materiali(id_materiale, nome, id_glb, risorse_glb(percorso_risorsa)))').eq('id_attributo', aid));
       opzioniPerAttr[aid] = ao.filter((r) => r.abilitata && r.opzioni).map((r) => r.opzioni)
         .sort((a, b) => a.ordine - b.ordine || a.nome.localeCompare(b.nome));
       const orders = $$('#attr-blocks [data-f=ordine]').map((input) => Number(input.value) || 0);
-      const pa = { id_attributo: aid, attributi: { nome: attribute.nome, descrizione: attribute.descrizione, tipo_attributo: attribute.tipo_attributo }, id_opzione_default: null, ordine: orders.length ? Math.max(...orders) + 1 : 0, obbligatorio: true, pending: true };
+      const pa = { id_attributo: aid, attributi: { nome: attribute.nome, descrizione: attribute.descrizione, tipo_attributo: attribute.tipo_attributo }, id_opzione_default: null, ordine: orders.length ? Math.max(...orders) + 1 : 0, obbligatorio: true, codifica: true, pending: true };
       assegnati.push(pa);
       $('#attr-blocks').insertAdjacentHTML('beforeend', attrBlock(pa));
       bindAttrBlock($('#attr-blocks').lastElementChild);
@@ -703,7 +706,7 @@ async function viewAttributi() {
   shell('<div class="empty">Caricamento…</div>', [['Attributi']]);
   const [attributi, ao] = await Promise.all([
     q(sb.from('attributi').select('*').order('nome')),
-    q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(nome, attiva, ordine)')),
+    q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(nome, descrizione, attiva, ordine)')),
   ]);
   const byAttr = {};
   ao.filter((r) => r.abilitata && r.opzioni).forEach((r) => (byAttr[r.id_attributo] ||= []).push(r.opzioni));
@@ -711,14 +714,14 @@ async function viewAttributi() {
 
   const draw = (filter = '') => {
     const f = filter.toLowerCase();
-    const rows = attributi.filter((a) => !f || `${a.nome} ${(byAttr[a.id_attributo] || []).map((o) => o.nome).join(' ')}`.toLowerCase().includes(f));
+    const rows = attributi.filter((a) => !f || `${a.nome} ${a.descrizione || ''} ${(byAttr[a.id_attributo] || []).map((o) => `${o.nome} ${o.descrizione || ''}`).join(' ')}`.toLowerCase().includes(f));
     $('#rows').innerHTML = rows.length ? rows.map((a) => {
       const opts = (byAttr[a.id_attributo] || []).sort((x, y) => x.ordine - y.ordine || x.nome.localeCompare(y.nome));
       return `<tr>
         <td><a href="#/attributi/${a.id_attributo}"><strong>${esc(a.nome)}</strong></a><div class="muted">${esc(a.descrizione)}</div></td>
         <td>${esc(a.tipo_attributo)}</td>
         <td>${a.id_attributo_padre ? `Derivato da <em>${esc(nome(a.id_attributo_padre))}</em>` : 'Generale'}</td>
-        <td>${opts.map((o) => `<span class="chip ${o.attiva ? '' : 'off'}">${esc(o.nome)}</span>`).join('') || '<span class="muted">—</span>'}</td>
+        <td>${opts.map((o) => `<span class="chip ${o.attiva ? '' : 'off'}">${esc(optionLabel(o))}</span>`).join('') || '<span class="muted">—</span>'}</td>
         <td><span class="badge ${a.attivo ? 'ok' : 'no'}">${a.attivo ? 'Attivo' : 'Non attivo'}</span></td>
         <td class="actions"><a class="btn small" href="#/attributi/${a.id_attributo}">${btn('pencil', 'Modifica')}</a> <button class="small danger" data-del="${a.id_attributo}">${btn('trash', 'Elimina')}</button></td></tr>`;
     }).join('') : '<tr><td colspan="6" class="empty">Nessun attributo.</td></tr>';
@@ -750,7 +753,7 @@ async function viewAttributo(idParam) {
   let opzioni = [], materiali = [], generali = [], padreOpzioni = [], esposte = [];
   const [mat, gen] = await Promise.all([
     q(sb.from('materiali').select('id_materiale, nome').order('nome')),
-    q(sb.from('attributi').select('id_attributo, nome, tipo_attributo').is('id_attributo_padre', null).order('nome')),
+    q(sb.from('attributi').select('id_attributo, nome, descrizione, tipo_attributo').is('id_attributo_padre', null).order('nome')),
   ]);
   materiali = mat; generali = gen;
   if (!isNew) {
@@ -759,7 +762,7 @@ async function viewAttributo(idParam) {
     attr = a;
     if (attr.id_attributo_padre) {
       [padreOpzioni, esposte] = await Promise.all([
-        q(sb.from('opzioni').select('id_opzione, nome, attiva, ordine').eq('id_attributo', attr.id_attributo_padre).order('ordine').order('nome')),
+        q(sb.from('opzioni').select('id_opzione, nome, descrizione, attiva, ordine').eq('id_attributo', attr.id_attributo_padre).order('ordine').order('nome')),
         q(sb.from('attributi_opzioni').select('id_opzione, abilitata').eq('id_attributo', id)),
       ]);
     } else {
@@ -786,7 +789,7 @@ async function viewAttributo(idParam) {
   const opzioniSection = isNew ? '<p class="muted">Dopo la creazione potrai definire le opzioni.</p>' : derivato ? `
     <section class="card"><h2>Opzioni del derivato</h2>
       <p class="muted">Seleziona le opzioni dell'attributo padre da includere in questo attributo.</p>
-      <div class="opt-grid">${padreOpzioni.map((o) => `<label class="check"><input type="checkbox" data-opt="${o.id_opzione}" ${abilitate.has(o.id_opzione) ? 'checked' : ''}> ${esc(o.nome)}${o.attiva ? '' : ' <span class="muted">(non attiva)</span>'}</label>`).join('') || '<span class="muted">L\'attributo padre non ha opzioni.</span>'}</div>
+      <div class="opt-grid">${padreOpzioni.map((o) => `<label class="check"><input type="checkbox" data-opt="${o.id_opzione}" ${abilitate.has(o.id_opzione) ? 'checked' : ''}> ${esc(optionLabel(o))}${o.attiva ? '' : ' <span class="muted">(non attiva)</span>'}</label>`).join('') || '<span class="muted">L\'attributo padre non ha opzioni.</span>'}</div>
 </section>` : `
     <section class="card"><h2>Opzioni</h2>
       <div class="table-scroll"><table><thead><tr><th>Nome</th><th>Descrizione</th><th>${attr.tipo_attributo === 'Materiale' ? 'Materiale' : 'Visibilità'}</th><th>Ordine</th><th>Attiva</th><th></th></tr></thead>
@@ -806,7 +809,7 @@ async function viewAttributo(idParam) {
           ${['Materiale', 'Visibilità'].map((t) => `<option ${attr.tipo_attributo === t ? 'selected' : ''}>${t}</option>`).join('')}</select></div>
         <div class="field"><label for="padre">Deriva da</label><select id="padre" ${isNew ? '' : 'disabled'}>
           <option value="">— nessuno (attributo generale) —</option>
-          ${generali.map((g) => `<option value="${g.id_attributo}" data-tipo="${esc(g.tipo_attributo)}" ${attr.id_attributo_padre === g.id_attributo ? 'selected' : ''}>${esc(g.nome)}</option>`).join('')}</select></div>
+          ${generali.map((g) => `<option value="${g.id_attributo}" data-tipo="${esc(g.tipo_attributo)}" ${attr.id_attributo_padre === g.id_attributo ? 'selected' : ''}>${esc(attributeLabel(g))}</option>`).join('')}</select></div>
       </div>
       <div class="field"><label for="descrizione">Descrizione</label><textarea id="descrizione">${esc(attr.descrizione)}</textarea></div>
       <div class="field"><label class="check"><input type="checkbox" id="attivo" ${attr.attivo ? 'checked' : ''}> Attivo</label></div>
@@ -990,14 +993,14 @@ async function loadProductConfig(id) {
   const attrIds = assegnati.map((a) => a.id_attributo);
   const optionsById = {};
   if (attrIds.length) {
-    const ao = await q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(id_opzione, nome, attiva, ordine, id_materiale, valore_visibilita, materiali(id_materiale, nome, id_glb, risorse_glb(percorso_risorsa)))').in('id_attributo', attrIds));
+    const ao = await q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(id_opzione, nome, descrizione, attiva, ordine, id_materiale, valore_visibilita, materiali(id_materiale, nome, id_glb, risorse_glb(percorso_risorsa)))').in('id_attributo', attrIds));
     ao.filter((r) => r.abilitata && r.opzioni).forEach((r) => (optionsById[r.id_attributo] ||= []).push(r.opzioni));
   }
   const attributes = assegnati.map((pa) => {
     const allowed = new Set(configs.filter((c) => c.id_attributo === pa.id_attributo).map((c) => c.id_opzione));
     const options = (optionsById[pa.id_attributo] || []).filter((o) => allowed.has(o.id_opzione))
       .sort((a, b) => a.ordine - b.ordine || a.nome.localeCompare(b.nome));
-    return { id: pa.id_attributo, nome: pa.attributi.nome, descrizione: pa.attributi.descrizione, tipo: pa.attributi.tipo_attributo, defaultId: pa.id_opzione_default, options };
+    return { id: pa.id_attributo, nome: pa.attributi.nome, descrizione: pa.attributi.descrizione, tipo: pa.attributi.tipo_attributo, codifica: pa.codifica !== false, defaultId: pa.id_opzione_default, options };
   }).filter((a) => a.options.length);
   return { prodotto, misure, attributes };
 }
@@ -1041,7 +1044,8 @@ async function viewCodifica(idParam) {
   if (!cfg) { toast('Prodotto non trovato', true); return go('#/codifica'); }
   const { misure, attributes } = cfg;
 
-  const total = misure.length * attributes.reduce((n, a) => n * a.options.length, 1);
+  const codingAttributes = attributes.filter((attribute) => attribute.codifica);
+  const total = misure.length * codingAttributes.reduce((n, a) => n * a.options.length, 1);
   if (total > MAX_COMBINATIONS) {
     shell(`${head()}<p class="empty">Il prodotto ha ${total} combinazioni (massimo gestito: ${MAX_COMBINATIONS}). Riduci le opzioni ammesse nella scheda prodotto.</p>`, crumbs);
     return bindSelect();
@@ -1054,11 +1058,11 @@ async function viewCodifica(idParam) {
   const byKey = new Map(existing.map((c) => [`${c.id_misura}|${c.chiave_combinazione}`, c]));
   const priceByCode = new Map();
   existingPrices.forEach((p) => priceByCode.set(`${p.id_listino}|${p.id_codice}`, p.prezzo == null ? '' : String(p.prezzo)));
-  const optionName = new Map(attributes.flatMap((a) => a.options.map((o) => [`${a.id}:${o.id_opzione}`, o.nome])));
+  const optionByKey = new Map(codingAttributes.flatMap((a) => a.options.map((o) => [`${a.id}:${o.id_opzione}`, o])));
 
   const rows = [];
   for (const misura of misure) {
-    for (const pairs of cartesian(attributes.map((a) => ({ id: a.id, options: a.options.map((o) => o.id_opzione) })))) {
+    for (const pairs of cartesian(codingAttributes.map((a) => ({ id: a.id, options: a.options.map((o) => o.id_opzione) })))) {
       const key = comboKey(pairs);
       const found = byKey.get(`${misura.id_misura}|${key}`);
       const prices = {};
@@ -1066,7 +1070,7 @@ async function viewCodifica(idParam) {
       else listini.forEach((l) => { prices[l.id_listino] = ''; });
       const row = { misura, key, pairs, existingId: found?.id_codice ?? null, codice: found?.codice_articolo ?? '', descr: found?.descrizione_articolo ?? '', prices };
       row.orig = JSON.stringify([row.codice, row.descr, row.prices]);
-      row.text = `${measureLabel(misura)} ${pairs.map(([a, o]) => `${attributes.find((x) => x.id === a).nome} ${optionName.get(`${a}:${o}`)}`).join(' ')}`.toLowerCase();
+      row.text = `${measureLabel(misura)} ${pairs.map(([a, o]) => `${attributeLabel(codingAttributes.find((x) => x.id === a))} ${optionLabel(optionByKey.get(`${a}:${o}`))}`).join(' ')}`.toLowerCase();
       rows.push(row);
     }
   }
@@ -1091,7 +1095,7 @@ async function viewCodifica(idParam) {
     $('#combo-count').textContent = `${visible.length} combinazioni su ${rows.length}${visible.length > MAX_SHOWN ? ` (mostrate le prime ${MAX_SHOWN}: usa i filtri)` : ''}.`;
     $('#combos').innerHTML = visible.slice(0, MAX_SHOWN).map(([r, i]) => `<tr data-i="${i}">
       <td>${esc(measureLabel(r.misura))}</td>
-      <td>${r.pairs.map(([a, o]) => `<span class="chip">${esc(attributes.find((x) => x.id === a).nome)}: ${esc(optionName.get(`${a}:${o}`))}</span>`).join(' ') || '<span class="muted">—</span>'}</td>
+      <td>${r.pairs.map(([a, o]) => `<span class="chip">${esc(attributeLabel(codingAttributes.find((x) => x.id === a)))}: ${esc(optionLabel(optionByKey.get(`${a}:${o}`)))}</span>`).join(' ') || '<span class="muted">—</span>'}</td>
       <td><input data-f="codice" maxlength="100" value="${esc(r.codice)}" aria-label="Codice commerciale"></td>
       <td><input data-f="descr" value="${esc(r.descr)}" aria-label="Descrizione commerciale"></td>
       <td style="width:130px"><input data-f="prezzo" type="number" min="0" step="0.01" value="${esc(r.prices[listinoId])}" aria-label="Prezzo"></td></tr>`).join('')
@@ -1213,7 +1217,7 @@ async function viewTest(idParam) {
           ${attributes.map((a) => `<div class="field"><label for="t-attr-${a.id}">${esc(a.nome)}</label>
             ${a.descrizione ? `<p class="muted">${esc(a.descrizione)}</p>` : ''}
             <select id="t-attr-${a.id}" data-t-attr="${a.id}">
-            ${a.options.map((o) => `<option value="${o.id_opzione}" ${(a.defaultId ?? a.options[0].id_opzione) === o.id_opzione ? 'selected' : ''}>${esc(o.nome)}</option>`).join('')}</select></div>`).join('') || '<p class="muted">Nessun attributo configurabile.</p>'}
+            ${a.options.map((o) => `<option value="${o.id_opzione}" ${(a.defaultId ?? a.options[0].id_opzione) === o.id_opzione ? 'selected' : ''}>${esc(optionLabel(o))}</option>`).join('')}</select></div>`).join('') || '<p class="muted">Nessun attributo configurabile.</p>'}
         </section>
         <section class="card result-card"><h2>Risultato</h2><div id="t-result" class="muted">…</div></section>
       </aside></div>`, crumbs);
@@ -1224,6 +1228,8 @@ async function viewTest(idParam) {
   const status = $('#t-status');
   const currentMeasure = () => misure.find((m) => String(m.id_misura) === measureSelect.value);
   const selection = () => attributes.map((a) => [a.id, Number($(`[data-t-attr="${a.id}"]`).value)]);
+  const codeSelection = () => attributes.filter((a) => a.codifica)
+    .map((a) => [a.id, Number($(`[data-t-attr="${a.id}"]`).value)]);
 
   // risultato commerciale
   let resultRevision = 0;
@@ -1233,7 +1239,7 @@ async function viewTest(idParam) {
     const m = currentMeasure();
     const listino = listini.find((l) => String(l.id_listino) === $('#t-listino').value);
     try {
-      const code = await q(sb.from('codifica').select('id_codice, codice_articolo, descrizione_articolo, attiva').eq('id_prodotto', id).eq('id_misura', m.id_misura).eq('chiave_combinazione', comboKey(selection())).maybeSingle());
+      const code = await q(sb.from('codifica').select('id_codice, codice_articolo, descrizione_articolo, attiva').eq('id_prodotto', id).eq('id_misura', m.id_misura).eq('chiave_combinazione', comboKey(codeSelection())).maybeSingle());
       let price = null;
       if (code) {
         const p = await q(sb.from('prezzi').select('prezzo').eq('id_listino', listino.id_listino).eq('id_codice', code.id_codice).maybeSingle());

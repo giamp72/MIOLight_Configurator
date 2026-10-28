@@ -271,9 +271,9 @@ async function viewProdotto(idParam) {
     const [p, m, pa, cf, attrs] = await Promise.all([
       q(sb.from('prodotti').select('*').eq('id_prodotto', id).maybeSingle()),
       q(sb.from('misure').select('*, risorse_glb(id_glb, nome_file, percorso_risorsa)').eq('id_prodotto', id).order('id_misura')),
-      q(sb.from('prodotti_attributi').select('*, attributi(nome, tipo_attributo)').eq('id_prodotto', id).order('ordine')),
+      q(sb.from('prodotti_attributi').select('*, attributi(nome, descrizione, tipo_attributo)').eq('id_prodotto', id).order('ordine')),
       q(sb.from('configurazioni').select('id_attributo, id_opzione').eq('id_prodotto', id)),
-      q(sb.from('attributi').select('id_attributo, nome, tipo_attributo, attivo').order('nome')),
+      q(sb.from('attributi').select('id_attributo, nome, descrizione, tipo_attributo, attivo').order('nome')),
     ]);
     if (!p) { toast('Prodotto non trovato', true); return go('#/prodotti'); }
     prodotto = p; misure = m; assegnati = pa; configs = cf; tuttiAttributi = attrs;
@@ -309,6 +309,7 @@ async function viewProdotto(idParam) {
     const sel = new Set(configs.filter((c) => c.id_attributo === pa.id_attributo).map((c) => c.id_opzione));
     return `<div class="attr-block" data-attr="${pa.id_attributo}" ${pa.pending ? 'data-new="1"' : ''}>
       <h3>${esc(pa.attributi.nome)} <span class="badge">${esc(pa.attributi.tipo_attributo)}</span></h3>
+      ${pa.attributi.descrizione ? `<p class="muted">${esc(pa.attributi.descrizione)}</p>` : ''}
       <label>Opzioni ammesse per questo prodotto</label>
       <div class="opt-grid">${opts.length ? opts.map((o) => `<label class="check"><input type="checkbox" data-opt="${o.id_opzione}" ${sel.has(o.id_opzione) ? 'checked' : ''}> ${esc(o.nome)}${o.attiva ? '' : ' <span class="muted">(non attiva)</span>'}</label>`).join('') : '<span class="muted">L\'attributo non ha opzioni.</span>'}</div>
       <div class="row">
@@ -351,6 +352,7 @@ async function viewProdotto(idParam) {
       const allowedIds = new Set(configs.filter((config) => config.id_attributo === attributeId).map((config) => config.id_opzione));
       const options = (previewOptionsByAttr[attributeId] || []).filter((option) => allowedIds.has(option.id_opzione));
       return `<div class="field"><label for="preview-attr-${attributeId}">${esc(attribute.attributi.nome)}</label>
+        ${attribute.attributi.descrizione ? `<p class="muted">${esc(attribute.attributi.descrizione)}</p>` : ''}
         <select id="preview-attr-${attributeId}" data-preview-attribute="${attributeId}">
           <option value="">— seleziona —</option>${options.map((option) => `<option value="${option.id_opzione}" ${String(option.id_opzione) === String(attribute.id_opzione_default || '') ? 'selected' : ''}>${esc(option.nome)}</option>`).join('')}
         </select></div>`;
@@ -579,7 +581,7 @@ async function viewProdotto(idParam) {
       opzioniPerAttr[aid] = ao.filter((r) => r.abilitata && r.opzioni).map((r) => r.opzioni)
         .sort((a, b) => a.ordine - b.ordine || a.nome.localeCompare(b.nome));
       const orders = $$('#attr-blocks [data-f=ordine]').map((input) => Number(input.value) || 0);
-      const pa = { id_attributo: aid, attributi: { nome: attribute.nome, tipo_attributo: attribute.tipo_attributo }, id_opzione_default: null, ordine: orders.length ? Math.max(...orders) + 1 : 0, obbligatorio: true, pending: true };
+      const pa = { id_attributo: aid, attributi: { nome: attribute.nome, descrizione: attribute.descrizione, tipo_attributo: attribute.tipo_attributo }, id_opzione_default: null, ordine: orders.length ? Math.max(...orders) + 1 : 0, obbligatorio: true, pending: true };
       assegnati.push(pa);
       $('#attr-blocks').insertAdjacentHTML('beforeend', attrBlock(pa));
       bindAttrBlock($('#attr-blocks').lastElementChild);
@@ -981,7 +983,7 @@ async function loadProductConfig(id) {
   const [prodotto, misure, assegnati, configs] = await Promise.all([
     q(sb.from('prodotti').select('*').eq('id_prodotto', id).maybeSingle()),
     q(sb.from('misure').select('*, risorse_glb(id_glb, nome_file, percorso_risorsa)').eq('id_prodotto', id).order('dim_x').order('dim_y').order('dim_z')),
-    q(sb.from('prodotti_attributi').select('*, attributi(nome, tipo_attributo)').eq('id_prodotto', id).order('ordine')),
+    q(sb.from('prodotti_attributi').select('*, attributi(nome, descrizione, tipo_attributo)').eq('id_prodotto', id).order('ordine')),
     q(sb.from('configurazioni').select('id_attributo, id_opzione').eq('id_prodotto', id)),
   ]);
   if (!prodotto) return null;
@@ -995,7 +997,7 @@ async function loadProductConfig(id) {
     const allowed = new Set(configs.filter((c) => c.id_attributo === pa.id_attributo).map((c) => c.id_opzione));
     const options = (optionsById[pa.id_attributo] || []).filter((o) => allowed.has(o.id_opzione))
       .sort((a, b) => a.ordine - b.ordine || a.nome.localeCompare(b.nome));
-    return { id: pa.id_attributo, nome: pa.attributi.nome, tipo: pa.attributi.tipo_attributo, defaultId: pa.id_opzione_default, options };
+    return { id: pa.id_attributo, nome: pa.attributi.nome, descrizione: pa.attributi.descrizione, tipo: pa.attributi.tipo_attributo, defaultId: pa.id_opzione_default, options };
   }).filter((a) => a.options.length);
   return { prodotto, misure, attributes };
 }
@@ -1208,7 +1210,9 @@ async function viewTest(idParam) {
       <div><div class="product-preview-stage test-stage" id="testStage"></div><p class="preview-status muted" id="t-status" role="status"></p></div>
       <aside>
         <section class="card"><h2>Configurazione</h2>
-          ${attributes.map((a) => `<div class="field"><label for="t-attr-${a.id}">${esc(a.nome)}</label><select id="t-attr-${a.id}" data-t-attr="${a.id}">
+          ${attributes.map((a) => `<div class="field"><label for="t-attr-${a.id}">${esc(a.nome)}</label>
+            ${a.descrizione ? `<p class="muted">${esc(a.descrizione)}</p>` : ''}
+            <select id="t-attr-${a.id}" data-t-attr="${a.id}">
             ${a.options.map((o) => `<option value="${o.id_opzione}" ${(a.defaultId ?? a.options[0].id_opzione) === o.id_opzione ? 'selected' : ''}>${esc(o.nome)}</option>`).join('')}</select></div>`).join('') || '<p class="muted">Nessun attributo configurabile.</p>'}
         </section>
         <section class="card result-card"><h2>Risultato</h2><div id="t-result" class="muted">…</div></section>

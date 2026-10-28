@@ -266,6 +266,7 @@ async function viewProdotto(idParam) {
   let prodotto = { nome: '', descrizione: '', attivo: true };
   let misure = [], assegnati = [], configs = [], tuttiAttributi = [], opzioniPerAttr = [];
   let meshRows = [], meshMappingsById = {}, previewOptionsByAttr = {};
+  const meshMappingKey = (meshId, role) => `${meshId}:${role}`;
   if (!isNew) {
     const [p, m, pa, cf, attrs] = await Promise.all([
       q(sb.from('prodotti').select('*').eq('id_prodotto', id).maybeSingle()),
@@ -290,7 +291,7 @@ async function viewProdotto(idParam) {
         q(sb.from('associazioni_mesh').select('id_mesh, id_attributo, ruolo').eq('id_prodotto', id)),
       ]);
       meshRows = allMeshes;
-      allMappings.forEach((mapping) => { meshMappingsById[mapping.id_mesh] = mapping.id_attributo; });
+      allMappings.forEach((mapping) => { meshMappingsById[meshMappingKey(mapping.id_mesh, mapping.ruolo)] = mapping.id_attributo; });
     }
   }
 
@@ -326,17 +327,20 @@ async function viewProdotto(idParam) {
       .sort((a, b) => a.percorso_nodo.localeCompare(b.percorso_nodo)) : [];
   };
   const mappedAttributeIds = (measureId) => [...new Set(meshesForMeasure(measureId)
-    .map((mesh) => meshMappingsById[mesh.id_mesh]).filter(Boolean))];
+    .flatMap((mesh) => ['Materiale', 'Visibilità'].map((role) => meshMappingsById[meshMappingKey(mesh.id_mesh, role)]).filter(Boolean)))];
+  const attributesForRole = (role) => assegnati.filter((attribute) => attribute.attributi.tipo_attributo === role);
+  const meshMappingRows = (rows) => rows.length ? `<div class="table-scroll"><table><thead><tr><th>Mesh</th><th>Percorso</th><th>Materiale originale</th><th>Attributo materiale</th><th>Attributo visibilità</th><th></th></tr></thead><tbody>
+    ${rows.map((mesh) => `<tr data-mesh-id="${mesh.id_mesh}"><td>${esc(mesh.nome_mesh)}</td><td><code>${esc(mesh.percorso_nodo)}</code></td><td>${esc(mesh.materiale_base || '—')}</td>
+      ${['Materiale', 'Visibilità'].map((role) => `<td><select data-mesh-map="${role}" aria-label="${role} per ${esc(mesh.nome_mesh)}"><option value="">— nessuno —</option>${attributesForRole(role).map((pa) => `<option value="${pa.id_attributo}" ${String(meshMappingsById[meshMappingKey(mesh.id_mesh, role)] || '') === String(pa.id_attributo) ? 'selected' : ''}>${esc(pa.attributi.nome)}</option>`).join('')}</select></td>`).join('')}
+      <td><button class="small ghost" type="button" data-highlight-mesh="${esc(mesh.percorso_nodo)}">Evidenzia</button></td></tr>`).join('')}
+    </tbody></table></div>` : '<p class="empty">Nessuna mesh nel GLB di questa misura.</p>';
   const meshMappingSection = () => {
     if (!previewMeasures.length) return '<p class="empty">Associa prima un GLB a una misura.</p>';
     const selectedId = String(previewMeasures[0].id_misura);
     const rows = meshesForMeasure(selectedId);
     return `<label for="mapping-measure">Misura / GLB</label>
       <select id="mapping-measure">${previewMeasures.map((measure) => `<option value="${measure.id_misura}">${esc(measure.dim_x)} × ${esc(measure.dim_y)} × ${esc(measure.dim_z)} ${esc(measure.unita_misura)} · ${esc(measure.risorse_glb.nome_file)}</option>`).join('')}</select>
-      <div id="mesh-map-rows">${rows.length ? `<div class="table-scroll"><table><thead><tr><th>Mesh</th><th>Percorso</th><th>Materiale originale</th><th>Attributo</th></tr></thead><tbody>
-        ${rows.map((mesh) => `<tr data-mesh-id="${mesh.id_mesh}"><td>${esc(mesh.nome_mesh)}</td><td><code>${esc(mesh.percorso_nodo)}</code></td><td>${esc(mesh.materiale_base || '—')}</td>
-          <td><select data-mesh-map><option value="">— non mappata —</option>${assegnati.map((pa) => `<option value="${pa.id_attributo}" ${String(meshMappingsById[mesh.id_mesh] || '') === String(pa.id_attributo) ? 'selected' : ''}>${esc(pa.attributi.nome)} (${esc(pa.attributi.tipo_attributo)})</option>`).join('')}</select></td></tr>`).join('')}
-        </tbody></table></div>` : '<p class="empty">Nessuna mesh nel GLB di questa misura.</p>'}</div>`;
+      <div id="mesh-map-rows">${meshMappingRows(rows)}</div>`;
   };
   const previewAttributesMarkup = (measureId) => {
     const attributeIds = mappedAttributeIds(measureId);
@@ -375,10 +379,11 @@ async function viewProdotto(idParam) {
         <option value="">— seleziona —</option>${assegnabili.map((a) => `<option value="${a.id_attributo}">${esc(a.nome)} (${esc(a.tipo_attributo)})</option>`).join('')}</select></div>
         </div><p class="muted">Puoi aggiungerne quanti vuoi: tutto viene salvato con il pulsante in basso.</p></section>
     <section class="card"><h2>Mappatura mesh</h2>
-      <p class="muted">Ogni GLB ha la propria mappatura, indipendente dagli altri GLB del prodotto.</p>
+      <p class="muted">Per ogni mesh puoi assegnare separatamente un attributo materiale e un attributo di visibilità. Ogni GLB ha la propria mappatura.</p>
+      <p class="muted">Mesh selezionata: <code id="mapping-highlighted">nessuna</code></p>
       ${meshMappingSection()}</section>
     <section class="card"><h2>Prova configurazione</h2>
-      <p class="muted">Seleziona gli attributi e verifica in anteprima il materiale applicato alle mesh del GLB.</p>
+      <p class="muted">Seleziona gli attributi e verifica in anteprima materiali e visibilità. Usa “Evidenzia” nella mappatura per individuare una mesh nel modello.</p>
       ${previewMeasures.length ? `<div class="product-preview-grid">
         <div><label for="preview-measure">Modello per misura</label>
           <select id="preview-measure">${previewMeasures.map((measure) => `<option value="${measure.id_misura}">${esc(measure.dim_x)} × ${esc(measure.dim_y)} × ${esc(measure.dim_z)} ${esc(measure.unita_misura)}</option>`).join('')}</select>
@@ -411,11 +416,12 @@ async function viewProdotto(idParam) {
     });
 
     const mappingChanges = [...new Set([...Object.keys(originalMappings), ...Object.keys(meshMappingsById)])]
-      .filter((meshId) => (originalMappings[meshId] ?? null) !== (meshMappingsById[meshId] ?? null));
-    const mappingRows = mappingChanges.filter((meshId) => meshMappingsById[meshId]).map((meshId) => {
-      const attribute = assegnati.find((item) => item.id_attributo === meshMappingsById[meshId]);
+      .filter((key) => (originalMappings[key] ?? null) !== (meshMappingsById[key] ?? null));
+    const mappingRows = mappingChanges.filter((key) => meshMappingsById[key]).map((key) => {
+      const [meshId, ruolo] = key.split(':');
+      const attribute = assegnati.find((item) => String(item.id_attributo) === String(meshMappingsById[key]));
       if (!attribute) throw new Error('Un attributo mappato non è più assegnato al prodotto.');
-      return { id_prodotto: id, id_mesh: Number(meshId), id_attributo: attribute.id_attributo, ruolo: attribute.attributi.tipo_attributo };
+      return { id_prodotto: id, id_mesh: Number(meshId), id_attributo: attribute.id_attributo, ruolo };
     });
 
     await q(sb.from('prodotti').update(rec).eq('id_prodotto', id));
@@ -439,7 +445,10 @@ async function viewProdotto(idParam) {
     }
 
     if (mappingChanges.length) {
-      await q(sb.from('associazioni_mesh').delete().eq('id_prodotto', id).in('id_mesh', mappingChanges.map(Number)));
+      for (const key of mappingChanges) {
+        const [meshId, ruolo] = key.split(':');
+        await q(sb.from('associazioni_mesh').delete().eq('id_prodotto', id).eq('id_mesh', meshId).eq('ruolo', ruolo));
+      }
       if (mappingRows.length) await q(sb.from('associazioni_mesh').insert(mappingRows));
     }
   };
@@ -501,17 +510,29 @@ async function viewProdotto(idParam) {
     if (!selector || !container) return;
     const draw = () => {
       const rows = meshesForMeasure(selector.value);
-      container.innerHTML = rows.length ? `<div class="table-scroll"><table><thead><tr><th>Mesh</th><th>Percorso</th><th>Materiale originale</th><th>Attributo</th></tr></thead><tbody>
-        ${rows.map((mesh) => `<tr data-mesh-id="${mesh.id_mesh}"><td>${esc(mesh.nome_mesh)}</td><td><code>${esc(mesh.percorso_nodo)}</code></td><td>${esc(mesh.materiale_base || '—')}</td>
-          <td><select data-mesh-map><option value="">— non mappata —</option>${assegnati.map((pa) => `<option value="${pa.id_attributo}" ${String(meshMappingsById[mesh.id_mesh] || '') === String(pa.id_attributo) ? 'selected' : ''}>${esc(pa.attributi.nome)} (${esc(pa.attributi.tipo_attributo)})</option>`).join('')}</select></td></tr>`).join('')}
-        </tbody></table></div>` : '<p class="empty">Nessuna mesh nel GLB di questa misura.</p>';
+      container.innerHTML = meshMappingRows(rows);
     };
     container.addEventListener('change', (e) => {
       if (!e.target.matches('[data-mesh-map]')) return;
       const meshId = e.target.closest('[data-mesh-id]').dataset.meshId;
+      const key = meshMappingKey(meshId, e.target.dataset.meshMap);
       const attributeId = num(e.target.value);
-      if (attributeId) meshMappingsById[meshId] = attributeId;
-      else delete meshMappingsById[meshId];
+      if (attributeId) meshMappingsById[key] = attributeId;
+      else delete meshMappingsById[key];
+      $('#preview-status').textContent = 'Mappatura modificata: premi Salva tutto per confermare.';
+    });
+    container.addEventListener('click', (e) => {
+      const button = e.target.closest('[data-highlight-mesh]');
+      if (!button) return;
+      container.querySelectorAll('[data-highlight-mesh]').forEach((item) => item.classList.toggle('selected', item === button));
+      $('#mapping-highlighted').textContent = button.dataset.highlightMesh;
+      const previewMeasure = $('#preview-measure');
+      if (previewMeasure && previewMeasure.value !== selector.value) {
+        previewMeasure.value = selector.value;
+        previewMeasure.dispatchEvent(new Event('change'));
+      } else {
+        $('#productPreview').dispatchEvent(new CustomEvent('product-preview-highlight', { detail: { path: button.dataset.highlightMesh } }));
+      }
     });
     selector.onchange = draw;
     redrawMapping = draw;
@@ -539,7 +560,7 @@ async function viewProdotto(idParam) {
       const index = assegnati.findIndex((item) => item.id_attributo === aid);
       const [removed] = assegnati.splice(index, 1);
       configs = configs.filter((c) => c.id_attributo !== aid);
-      Object.keys(meshMappingsById).filter((m) => meshMappingsById[m] === aid).forEach((m) => { delete meshMappingsById[m]; delete originalMappings[m]; });
+      Object.keys(meshMappingsById).filter((key) => meshMappingsById[key] === aid).forEach((key) => { delete meshMappingsById[key]; delete originalMappings[key]; });
       attrSelect.add(new Option(`${removed.attributi.nome} (${removed.attributi.tipo_attributo})`, aid));
       block.remove();
       $('#no-attr').hidden = assegnati.length > 0;
@@ -600,29 +621,31 @@ async function viewProdotto(idParam) {
       if (!previewViewer || previewToken !== productPreviewToken) return;
       const revision = ++applyRevision;
       const messages = [];
-      const entries = [];
+      const entriesByPath = new Map();
       const measureId = measureSelect.value;
       for (const mesh of meshesForMeasure(measureId)) {
-        const attributeId = meshMappingsById[mesh.id_mesh];
-        if (!attributeId) continue;
-        const option = optionFor(attributeId);
-        if (!option) continue;
-        const attribute = assegnati.find((item) => item.id_attributo === attributeId);
-        if (attribute?.attributi.tipo_attributo === 'Materiale') {
-          if (!option.materiali?.id_glb || !option.materiali.risorse_glb?.percorso_risorsa) {
-            messages.push(`${attribute.attributi.nome}: ${option.nome} non ha un GLB materiale associato.`);
-            entries.push({ path: mesh.percorso_nodo });
-            continue;
+        const entry = { path: mesh.percorso_nodo };
+        for (const role of ['Materiale', 'Visibilità']) {
+          const attributeId = meshMappingsById[meshMappingKey(mesh.id_mesh, role)];
+          if (!attributeId) continue;
+          const option = optionFor(attributeId);
+          if (!option) continue;
+          const attribute = assegnati.find((item) => item.id_attributo === attributeId);
+          if (role === 'Materiale') {
+            if (!option.materiali?.id_glb || !option.materiali.risorse_glb?.percorso_risorsa) {
+              messages.push(`${attribute.attributi.nome}: ${option.nome} non ha un GLB materiale associato.`);
+              continue;
+            }
+            const url = await signedUrlFor(option.materiali.risorse_glb.percorso_risorsa);
+            entry.material = await previewViewer.loadMaterial(option.id_materiale, url);
+          } else if (option.valore_visibilita !== null) {
+            entry.visible = option.valore_visibilita;
           }
-          const url = await signedUrlFor(option.materiali.risorse_glb.percorso_risorsa);
-          const material = await previewViewer.loadMaterial(option.id_materiale, url);
-          entries.push({ path: mesh.percorso_nodo, material });
-        } else if (option.valore_visibilita !== null) {
-          entries.push({ path: mesh.percorso_nodo, visible: option.valore_visibilita });
         }
+        entriesByPath.set(mesh.percorso_nodo, entry);
       }
       if (revision !== applyRevision || previewToken !== productPreviewToken) return;
-      previewViewer.applyConfiguration(entries);
+      previewViewer.applyConfiguration([...entriesByPath.values()]);
       status.textContent = messages.length ? messages.join(' ') : 'Anteprima aggiornata.';
       status.classList.toggle('error-text', messages.length > 0);
     };
@@ -645,6 +668,7 @@ async function viewProdotto(idParam) {
         if (previewToken !== productPreviewToken) return;
         $('#preview-attributes').innerHTML = previewAttributesMarkup(selectedMeasure.id_misura);
         bindPreviewAttributes();
+        previewViewer.highlight($('#mapping-highlighted').textContent === 'nessuna' ? null : $('#mapping-highlighted').textContent);
         await applyPreview();
       } catch (error) {
         status.textContent = `Impossibile caricare l’anteprima: ${errMsg(error)}`;
@@ -664,6 +688,9 @@ async function viewProdotto(idParam) {
       });
     };
     measureSelect.onchange = loadSelectedMeasure;
+    stage.addEventListener('product-preview-highlight', (event) => {
+      previewViewer?.highlight(event.detail.path);
+    });
     bindPreviewAttributes();
     loadSelectedMeasure();
   }
@@ -1227,10 +1254,10 @@ async function viewTest(idParam) {
   if (glbIds.length) {
     const [meshes, assoc] = await Promise.all([
       q(sb.from('mesh_glb').select('id_mesh, id_glb, percorso_nodo').in('id_glb', glbIds)),
-      q(sb.from('associazioni_mesh').select('id_mesh, id_attributo').eq('id_prodotto', id)),
+      q(sb.from('associazioni_mesh').select('id_mesh, id_attributo, ruolo').eq('id_prodotto', id)),
     ]);
     meshRows = meshes;
-    assoc.forEach((a) => { mappings[a.id_mesh] = a.id_attributo; });
+    assoc.forEach((a) => { mappings[`${a.id_mesh}:${a.ruolo}`] = a.id_attributo; });
   }
   const signedUrls = new Map();
   const signedUrlFor = async (path) => {
@@ -1249,22 +1276,26 @@ async function viewTest(idParam) {
     const m = currentMeasure();
     const chosen = new Map(selection());
     const messages = [];
-    const entries = [];
+    const entriesByPath = new Map();
     for (const mesh of meshRows.filter((x) => x.id_glb === m.id_glb)) {
-      const attributeId = mappings[mesh.id_mesh];
-      const attribute = attributes.find((a) => a.id === attributeId);
-      const option = attribute && optionById.get(chosen.get(attributeId));
-      if (!option) continue;
-      if (attribute.tipo === 'Materiale') {
-        const path = option.materiali?.risorse_glb?.percorso_risorsa;
-        if (!path) { messages.push(`${attribute.nome}: ${option.nome} non ha un GLB materiale.`); continue; }
-        entries.push({ path: mesh.percorso_nodo, material: await viewer.loadMaterial(option.id_materiale, await signedUrlFor(path)) });
-      } else if (option.valore_visibilita !== null) {
-        entries.push({ path: mesh.percorso_nodo, visible: option.valore_visibilita });
+      const entry = { path: mesh.percorso_nodo };
+      for (const role of ['Materiale', 'Visibilità']) {
+        const attributeId = mappings[`${mesh.id_mesh}:${role}`];
+        const attribute = attributes.find((a) => a.id === attributeId);
+        const option = attribute && optionById.get(chosen.get(attributeId));
+        if (!option) continue;
+        if (role === 'Materiale') {
+          const path = option.materiali?.risorse_glb?.percorso_risorsa;
+          if (!path) { messages.push(`${attribute.nome}: ${option.nome} non ha un GLB materiale.`); continue; }
+          entry.material = await viewer.loadMaterial(option.id_materiale, await signedUrlFor(path));
+        } else if (option.valore_visibilita !== null) {
+          entry.visible = option.valore_visibilita;
+        }
       }
+      entriesByPath.set(mesh.percorso_nodo, entry);
     }
     if (revision !== applyRevision || token !== productPreviewToken) return;
-    viewer.applyConfiguration(entries);
+    viewer.applyConfiguration([...entriesByPath.values()]);
     status.textContent = messages.join(' ');
     status.classList.toggle('error-text', messages.length > 0);
   };

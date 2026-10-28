@@ -69,6 +69,8 @@ create table prodotti (
   nome        varchar(200) not null,
   descrizione text,
   attivo      boolean not null default true,
+  validato    boolean not null default false,
+  validato_il timestamptz,
   creato_il   timestamptz not null default now()
 );
 
@@ -321,3 +323,7 @@ create policy "autenticati_glb_update" on storage.objects
   for update to authenticated using (bucket_id = 'modelli-glb') with check (bucket_id = 'modelli-glb');
 create policy "autenticati_glb_delete" on storage.objects
   for delete to authenticated using (bucket_id = 'modelli-glb');
+
+-- Flag "Testato e pronto all'uso" (Final Check). Se lo schema è già installato, esegui solo questo blocco.
+alter table prodotti add column if not exists validato boolean not null default false;
+alter table prodotti add column if not exists validato_il timestamptz;

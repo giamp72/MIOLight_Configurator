@@ -91,6 +91,7 @@ create table prodotti_attributi (
   id_opzione_default bigint,
   ordine             int not null default 0,
   obbligatorio       boolean not null default true,
+  codifica           boolean not null default true,
   primary key (id_prodotto, id_attributo)
 );
 
@@ -327,3 +328,6 @@ create policy "autenticati_glb_delete" on storage.objects
 -- Flag "Testato e pronto all'uso" (Final Check). Se lo schema è già installato, esegui solo questo blocco.
 alter table prodotti add column if not exists validato boolean not null default false;
 alter table prodotti add column if not exists validato_il timestamptz;
+
+-- Flag per includere l'attributo nelle combinazioni di codifica. I prodotti esistenti restano invariati.
+alter table prodotti_attributi add column if not exists codifica boolean not null default true;

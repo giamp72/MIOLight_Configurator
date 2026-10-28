@@ -131,9 +131,31 @@ async function uploadGlbResource(file, type, folder) {
   }
 }
 
+// Icone a tratto in stile SF Symbols.
+const ICONS = {
+  cube: '<path d="M12 3 4 7.5v9L12 21l8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/>',
+  sliders: '<path d="M4 7h9m4 0h3M4 17h3m4 0h9"/><circle cx="15" cy="7" r="2"/><circle cx="9" cy="17" r="2"/>',
+  swatch: '<circle cx="12" cy="12" r="9"/><circle cx="8.5" cy="10" r="1" /><circle cx="12" cy="7.5" r="1"/><circle cx="15.5" cy="10" r="1"/><path d="M12 21c-1.5 0-2-1.2-1.4-2.4.6-1.2 0-2.1-1.1-2.1H8"/>',
+  tag: '<path d="M3.5 12.5V4.5a1 1 0 0 1 1-1h8l8 8a1.4 1.4 0 0 1 0 2l-6.5 6.5a1.4 1.4 0 0 1-2 0l-8-8Z"/><circle cx="8" cy="8" r="1.3"/>',
+  seal: '<path d="M12 3l2.2 1.6 2.7-.1.9 2.600 2.200 1.600-.8 2.600.8 2.600-2.200 1.600-.9 2.600-2.700-.1L12 21l-2.200-1.600-2.700.1-.9-2.600-2.200-1.600.8-2.600-.8-2.600 2.200-1.600.9-2.600 2.700.1L12 3Z"/><path d="m8.800 12.200 2.200 2.200 4.200-4.400"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  trash: '<path d="M4 7h16M10 11v6m4-6v6M6 7l1 12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1l1-12M9 7V4h6v3"/>',
+  pencil: '<path d="m15 5 4 4M4 20l1-4L16.500 4.500a2 2 0 0 1 3 3L8 19l-4 1Z"/>',
+  search: '<circle cx="11" cy="11" r="6.500"/><path d="m16 16 4.500 4.500"/>',
+  chevron: '<path d="m9 6 6 6-6 6"/>',
+  logout: '<path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 8l-4 4 4 4M6 12h10"/>',
+  upload: '<path d="M12 16V4m0 0L8 8m4-4 4 4M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3"/>',
+  check: '<circle cx="12" cy="12" r="9"/><path d="m8 12.500 3 3 5-6"/>',
+  save: '<path d="M5 4h11l3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
+  close: '<path d="m6 6 12 12M18 6 6 18"/>',
+  cubeLogo: '<path d="M12 3 4 7.500v9L12 21l8-4.500v-9L12 3Z"/><path d="m4 7.500 8 4.500 8-4.500M12 12v9"/>',
+};
+const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
+const btn = (name, label) => `${icon(name)}<span>${label}</span>`;
+
 const go = (hash) => { location.hash = hash; };
 
-const saveBar = (label = 'Salva tutto') => `<div class="save-bar"><span class="muted">Un solo pulsante salva tutte le modifiche della pagina.</span><button class="primary" id="save-all" type="button">${label}</button></div>`;
+const saveBar = (label = 'Salva tutto') => `<div class="save-bar"><span class="muted">Le modifiche vengono salvate solo con questo pulsante.</span><button class="primary" id="save-all" type="button">${btn('save', label)}</button></div>`;
 
 // Collega il pulsante unico di salvataggio: fn lancia un errore se qualcosa non va, after parte solo a salvataggio riuscito.
 function bindSaveAll(fn, after) {
@@ -150,12 +172,12 @@ function bindSaveAll(fn, after) {
 function shell(content, crumbs = []) {
   const trail = [['Menu', '#/'], ...crumbs]
     .map(([label, href]) => (href ? `<a href="${href}">${esc(label)}</a>` : esc(label)))
-    .join(' › ');
+    .join(icon('chevron'));
   app.innerHTML = `
     <header class="topbar">
-      <a class="brand" href="#/">MIODESIGN<small>MANUTENZIONE DATI</small></a>
+      <a class="brand" href="#/"><span class="brand-logo">${icon('cubeLogo')}</span><span>MIODesign<small>Manutenzione dati</small></span></a>
       <div class="topbar-right"><span class="muted">${esc(session?.user?.email)}</span>
-        <button class="small" id="logout">Esci</button></div>
+        <button class="small" id="logout">${btn('logout', 'Esci')}</button></div>
     </header>
     <main>${crumbs.length ? `<div class="crumbs">${trail}</div>` : ''}${content}</main>`;
   $('#logout').onclick = () => sb.auth.signOut();
@@ -165,7 +187,7 @@ function shell(content, crumbs = []) {
 function viewLogin() {
   app.innerHTML = `
     <div class="login-wrap"><form class="card login-card" id="login">
-      <h1>MIODesign</h1><p class="muted">Accedi per gestire i dati di prodotto.</p>
+      <span class="brand-logo">${icon('cubeLogo')}</span><h1>MIODesign</h1><p class="muted">Accedi per gestire i dati di prodotto.</p>
       ${configured ? '' : '<p class="notice">Configura SUPABASE_URL e SUPABASE_ANON_KEY in <code>config.js</code>.</p>'}
       <div class="field"><label for="email">Email</label><input id="email" type="email" required autocomplete="username"></div>
       <div class="field"><label for="password">Password</label><input id="password" type="password" required autocomplete="current-password"></div>
@@ -183,17 +205,19 @@ function viewMenu() {
   shell(`
     <div class="page-head"><div><h1>Menu</h1><span class="muted">Seleziona l'area da gestire.</span></div></div>
     <div class="menu-grid">
-      <a class="menu-tile" href="#/prodotti"><strong>Anagrafica prodotti</strong><span class="muted">Consulta, crea, modifica ed elimina i prodotti, con misure e attributi assegnati.</span></a>
-      <a class="menu-tile" href="#/attributi"><strong>Anagrafica attributi / opzioni</strong><span class="muted">Gestisci gli attributi (generali e derivati) e le relative opzioni.</span></a>
-      <a class="menu-tile" href="#/materiali"><strong>Anagrafica materiali</strong><span class="muted">Definisci i materiali e associa il relativo GLB.</span></a>
-      <a class="menu-tile" href="#/codifica"><strong>Codici e prezzi</strong><span class="muted">Per ogni combinazione misura / attributi assegna codice commerciale, descrizione e prezzo.</span></a>
-      <a class="menu-tile" href="#/test"><strong>Test prodotto</strong><span class="muted">Configura un prodotto e verifica codice, descrizione, prezzo e anteprima 3D.</span></a>
+      ${[
+        ['#/materiali', 'swatch', 'tone-orange', 'Materiali', 'Definisci i materiali e associa il relativo GLB.'],
+        ['#/attributi', 'sliders', 'tone-purple', 'Attributi', 'Gestisci gli attributi (generali e derivati) e le relative opzioni.'],
+        ['#/prodotti', 'cube', 'tone-blue', 'Prodotti', 'Crea e modifica i prodotti, con misure, attributi e mappatura mesh.'],
+        ['#/codifica', 'tag', 'tone-teal', 'Codifica e Pricing', 'Per ogni combinazione assegna codice commerciale, descrizione e prezzo.'],
+        ['#/test', 'seal', 'tone-green', 'Final Check', 'Verifica codice, prezzo e anteprima 3D e segna il prodotto come testato.'],
+      ].map(([href, ic, tone, title, text], n) => `<a class="menu-tile" href="${href}"><span class="menu-icon ${tone}">${icon(ic)}</span><span><strong>${title}</strong><span class="muted">${text}</span></span><span class="menu-step">${n + 1}</span></a>`).join('')}
     </div>`);
 }
 
 // ---------- prodotti: elenco ----------
 async function viewProdotti() {
-  shell('<div class="empty">Caricamento…</div>', [['Anagrafica prodotti']]);
+  shell('<div class="empty">Caricamento…</div>', [['Prodotti']]);
   const [prodotti, misure] = await Promise.all([
     q(sb.from('prodotti').select('*').order('id_prodotto')),
     q(sb.from('misure').select('id_prodotto')),
@@ -208,21 +232,21 @@ async function viewProdotti() {
       ? rows.map((p) => `<tr>
           <td>${p.id_prodotto}</td><td><a href="#/prodotti/${p.id_prodotto}"><strong>${esc(p.nome)}</strong></a></td>
           <td class="muted">${esc(p.descrizione)}</td><td>${nMisure[p.id_prodotto] || 0}</td>
-          <td><span class="badge ${p.attivo ? 'ok' : 'no'}">${p.attivo ? 'Attivo' : 'Non attivo'}</span></td>
-          <td class="actions"><a class="btn small" href="#/prodotti/${p.id_prodotto}">Modifica</a>
-            <button class="small danger" data-del="${p.id_prodotto}">Elimina</button></td></tr>`).join('')
+          <td><span class="badge ${p.attivo ? 'ok' : 'no'}">${p.attivo ? 'Attivo' : 'Non attivo'}</span> ${p.validato ? '<span class="badge ok">Testato</span>' : '<span class="badge warn">Da validare</span>'}</td>
+          <td class="actions"><a class="btn small" href="#/prodotti/${p.id_prodotto}">${btn('pencil', 'Modifica')}</a>
+            <button class="small danger" data-del="${p.id_prodotto}">${btn('trash', 'Elimina')}</button></td></tr>`).join('')
       : '<tr><td colspan="6" class="empty">Nessun prodotto.</td></tr>';
   };
 
   shell(`
-    <div class="page-head"><div><h1>Anagrafica prodotti</h1><span class="muted">${prodotti.length} prodotti</span></div>
-      <div class="row"><input class="search" id="search" placeholder="Cerca…"><a class="btn primary shrink" href="#/prodotti/nuovo">+ Nuovo prodotto</a></div></div>
+    <div class="page-head"><div><h1>Prodotti</h1><span class="muted">${prodotti.length} prodotti</span></div>
+      <div class="row"><div class="search-wrap">${icon('search')}<input class="search" id="search" placeholder="Cerca…"></div><a class="btn primary shrink" href="#/prodotti/nuovo">${btn('plus', 'Nuovo prodotto')}</a></div></div>
     <div class="card table-scroll"><table><thead><tr><th>ID</th><th>Nome</th><th>Descrizione</th><th>Misure</th><th>Stato</th><th></th></tr></thead>
-    <tbody id="rows"></tbody></table></div>`, [['Anagrafica prodotti']]);
+    <tbody id="rows"></tbody></table></div>`, [['Prodotti']]);
   draw();
   $('#search').oninput = (e) => draw(e.target.value);
   $('#rows').onclick = async (e) => {
-    const id = e.target.dataset.del;
+    const id = e.target.closest('[data-del]')?.dataset.del;
     if (!id) return;
     const p = prodotti.find((x) => x.id_prodotto == id);
     if (!confirm(`Eliminare il prodotto "${p.nome}" con misure, attributi e combinazioni collegate?`)) return;
@@ -237,7 +261,7 @@ async function viewProdotto(idParam) {
   activeProductPreview = null;
   const isNew = idParam === 'nuovo';
   const id = isNew ? null : Number(idParam);
-  shell('<div class="empty">Caricamento…</div>', [['Anagrafica prodotti', '#/prodotti'], [isNew ? 'Nuovo prodotto' : `Prodotto ${id}`]]);
+  shell('<div class="empty">Caricamento…</div>', [['Prodotti', '#/prodotti'], [isNew ? 'Nuovo prodotto' : `Prodotto ${id}`]]);
 
   let prodotto = { nome: '', descrizione: '', attivo: true };
   let misure = [], assegnati = [], configs = [], tuttiAttributi = [], opzioniPerAttr = [];
@@ -276,13 +300,13 @@ async function viewProdotto(idParam) {
       <td><input type="number" step="any" data-f="dim_z" value="${esc(m?.dim_z)}" aria-label="Profondità"></td>
       <td><select data-f="unita_misura">${['cm', 'mm'].map((u) => `<option ${((m?.unita_misura) || 'cm') === u ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
       <td><span data-glb-name>${m?.risorse_glb ? `<span class="chip">${esc(m.risorse_glb.nome_file)}</span>` : '<span class="muted">Nessun GLB</span>'}</span>
-        <label class="upload-button small">Carica GLB<input type="file" data-f="glb" accept=".glb,model/gltf-binary" aria-label="Carica GLB oggetto"></label><span class="upload-status muted" data-upload-status></span></td>
-      <td class="actions">${m ? '<button class="small danger" data-act="clear-glb">Rimuovi GLB</button> <button class="small danger" data-act="del">Elimina</button>' : ''}</td></tr>`;
+        <label class="upload-button small btn">${icon('upload')}<span>Carica GLB</span><input type="file" data-f="glb" accept=".glb,model/gltf-binary" aria-label="Carica GLB oggetto"></label><span class="upload-status muted" data-upload-status></span></td>
+      <td class="actions">${m ? `<button class="small danger" data-act="clear-glb">Rimuovi GLB</button> <button class="small danger" data-act="del">${btn('trash', 'Elimina')}</button>` : `<button class="small ghost" data-act="drop">${btn('close', 'Annulla')}</button>`}</td></tr>`;
 
   const attrBlock = (pa) => {
     const opts = opzioniPerAttr[pa.id_attributo] || [];
     const sel = new Set(configs.filter((c) => c.id_attributo === pa.id_attributo).map((c) => c.id_opzione));
-    return `<div class="attr-block" data-attr="${pa.id_attributo}">
+    return `<div class="attr-block" data-attr="${pa.id_attributo}" ${pa.pending ? 'data-new="1"' : ''}>
       <h3>${esc(pa.attributi.nome)} <span class="badge">${esc(pa.attributi.tipo_attributo)}</span></h3>
       <label>Opzioni ammesse per questo prodotto</label>
       <div class="opt-grid">${opts.length ? opts.map((o) => `<label class="check"><input type="checkbox" data-opt="${o.id_opzione}" ${sel.has(o.id_opzione) ? 'checked' : ''}> ${esc(o.nome)}${o.attiva ? '' : ' <span class="muted">(non attiva)</span>'}</label>`).join('') : '<span class="muted">L\'attributo non ha opzioni.</span>'}</div>
@@ -290,7 +314,7 @@ async function viewProdotto(idParam) {
         <div><label>Default</label><select data-f="default"><option value="">— nessuno —</option>${opts.filter((o) => sel.has(o.id_opzione)).map((o) => `<option value="${o.id_opzione}" ${pa.id_opzione_default === o.id_opzione ? 'selected' : ''}>${esc(o.nome)}</option>`).join('')}</select></div>
         <div><label>Ordine</label><input type="number" data-f="ordine" value="${pa.ordine}"></div>
         <label class="check shrink"><input type="checkbox" data-f="obbligatorio" ${pa.obbligatorio ? 'checked' : ''}> Obbligatorio</label>
-        <div class="shrink"><button class="small danger" type="button" data-act="remove">Rimuovi</button></div>
+        <div class="shrink"><button class="small danger" type="button" data-act="remove">${btn('trash', 'Rimuovi')}</button></div>
       </div></div>`;
   };
 
@@ -331,7 +355,7 @@ async function viewProdotto(idParam) {
 
   shell(`
     <div class="page-head"><div><h1>${isNew ? 'Nuovo prodotto' : esc(prodotto.nome)}</h1>
-      <span class="muted">${isNew ? 'L\'ID progressivo verrà assegnato al salvataggio.' : `ID prodotto ${id}`}</span></div><a class="btn" href="#/prodotti">Chiudi</a></div>
+      <span class="muted">${isNew ? 'L\'ID progressivo verrà assegnato al salvataggio.' : `ID prodotto ${id}`}</span></div><a class="btn" href="#/prodotti">${btn('close', 'Chiudi')}</a></div>
     <form class="card" id="form-prodotto">
       <h2>Dati prodotto</h2>
       <div class="field"><label for="nome">Nome *</label><input id="nome" required maxlength="200" value="${esc(prodotto.nome)}"></div>
@@ -342,12 +366,14 @@ async function viewProdotto(idParam) {
     <section class="card"><h2>Misure e GLB (terne larghezza / altezza / profondità)</h2>
       <p class="muted">Ogni terna può avere un GLB indipendente, con mesh e mappatura attributi proprie.</p>
       <div class="table-scroll"><table><thead><tr><th>Larghezza</th><th>Altezza</th><th>Profondità</th><th>Unità</th><th>GLB oggetto</th><th></th></tr></thead>
-      <tbody id="misure">${misure.map(misuraRow).join('')}${misuraRow(null)}</tbody></table></div></section>
+      <tbody id="misure">${misure.map(misuraRow).join('')}${misuraRow(null)}</tbody></table></div>
+      <button class="add-row" type="button" id="add-misura">${btn('plus', 'Aggiungi misura')}</button></section>
     <section class="card"><h2>Attributi del prodotto</h2>
-      ${assegnati.length ? assegnati.map(attrBlock).join('') : '<p class="muted">Nessun attributo assegnato.</p>'}
+      <div id="attr-blocks">${assegnati.map(attrBlock).join('')}</div>
+      <p class="muted" id="no-attr" ${assegnati.length ? 'hidden' : ''}>Nessun attributo assegnato.</p>
       <div class="row"><div><label for="nuovo-attr">Aggiungi attributo</label><select id="nuovo-attr">
         <option value="">— seleziona —</option>${assegnabili.map((a) => `<option value="${a.id_attributo}">${esc(a.nome)} (${esc(a.tipo_attributo)})</option>`).join('')}</select></div>
-        </div><p class="muted">L'attributo selezionato viene assegnato al salvataggio.</p></section>
+        </div><p class="muted">Puoi aggiungerne quanti vuoi: tutto viene salvato con il pulsante in basso.</p></section>
     <section class="card"><h2>Mappatura mesh</h2>
       <p class="muted">Ogni GLB ha la propria mappatura, indipendente dagli altri GLB del prodotto.</p>
       ${meshMappingSection()}</section>
@@ -362,7 +388,7 @@ async function viewProdotto(idParam) {
         <div class="preview-attributes"><h3>Attributi del GLB</h3><div id="preview-attributes">${previewAttributesMarkup(previewMeasures[0].id_misura)}</div></div></div>`
       : '<p class="empty">Associa un GLB a una misura per avviare la prova.</p>'}</section>`}
     ${saveBar(isNew ? 'Crea prodotto' : 'Salva tutto')}`,
-    [['Anagrafica prodotti', '#/prodotti'], [isNew ? 'Nuovo prodotto' : `Prodotto ${id}`]]);
+    [['Prodotti', '#/prodotti'], [isNew ? 'Nuovo prodotto' : `Prodotto ${id}`]]);
 
   const originalMappings = { ...meshMappingsById };
   let createdId = null;
@@ -398,7 +424,11 @@ async function viewProdotto(idParam) {
     for (const block of $$('.attr-block')) {
       const aid = Number(block.dataset.attr);
       const wanted = $$('[data-opt]:checked', block).map((c) => Number(c.dataset.opt));
-      const had = configs.filter((c) => c.id_attributo === aid).map((c) => c.id_opzione);
+      const isPending = block.dataset.new === '1';
+      const had = isPending ? [] : configs.filter((c) => c.id_attributo === aid).map((c) => c.id_opzione);
+      if (isPending) {
+        await q(sb.from('prodotti_attributi').upsert({ id_prodotto: id, id_attributo: aid, ordine: num($('[data-f=ordine]', block).value) ?? 0, obbligatorio: $('[data-f=obbligatorio]', block).checked }, { onConflict: 'id_prodotto,id_attributo' }));
+      }
       const toDel = had.filter((o) => !wanted.includes(o));
       const toAdd = wanted.filter((o) => !had.includes(o));
       if (toDel.length) await q(sb.from('configurazioni').delete().eq('id_prodotto', id).eq('id_attributo', aid).in('id_opzione', toDel));
@@ -406,12 +436,6 @@ async function viewProdotto(idParam) {
       await q(sb.from('prodotti_attributi').update({
         id_opzione_default: num($('[data-f=default]', block).value), ordine: num($('[data-f=ordine]', block).value) ?? 0, obbligatorio: $('[data-f=obbligatorio]', block).checked,
       }).eq('id_prodotto', id).eq('id_attributo', aid));
-    }
-
-    const newAttribute = num($('#nuovo-attr').value);
-    if (newAttribute) {
-      const ordine = assegnati.length ? Math.max(...assegnati.map((a) => a.ordine)) + 1 : 0;
-      await q(sb.from('prodotti_attributi').insert({ id_prodotto: id, id_attributo: newAttribute, ordine }));
     }
 
     if (mappingChanges.length) {
@@ -449,10 +473,11 @@ async function viewProdotto(idParam) {
   });
 
   $('#misure').onclick = async (e) => {
-    const action = e.target.dataset.act;
+    const action = e.target.closest('[data-act]')?.dataset.act;
     if (!action) return;
     const tr = e.target.closest('tr');
     const mid = tr.dataset.misura;
+    if (action === 'drop') { tr.remove(); return; }
     if (action === 'clear-glb') {
       tr.dataset.glb = '';
       $('[data-glb-name]', tr).innerHTML = '<span class="muted">Nessun GLB</span>';
@@ -461,10 +486,15 @@ async function viewProdotto(idParam) {
     }
     if (action === 'del') {
       if (!confirm('Eliminare la misura e le combinazioni commerciali collegate?')) return;
-      if (await act(() => q(sb.from('misure').delete().eq('id_misura', mid)), 'Misura eliminata')) reload();
+      if (await act(() => q(sb.from('misure').delete().eq('id_misura', mid)), 'Misura eliminata')) tr.remove();
     }
   };
+  $('#add-misura').onclick = () => {
+    $('#misure').insertAdjacentHTML('beforeend', misuraRow(null));
+    $('#misure tr:last-child [data-f=dim_x]').focus();
+  };
 
+  let redrawMapping = () => {};
   const bindMeshMapping = () => {
     const selector = $('#mapping-measure');
     const container = $('#mesh-map-rows');
@@ -484,11 +514,13 @@ async function viewProdotto(idParam) {
       else delete meshMappingsById[meshId];
     });
     selector.onchange = draw;
+    redrawMapping = draw;
     draw();
   };
   bindMeshMapping();
 
-  $$('.attr-block').forEach((block) => {
+  const attrSelect = $('#nuovo-attr');
+  const bindAttrBlock = (block) => {
     const aid = Number(block.dataset.attr);
     // il default può essere scelto solo fra le opzioni spuntate
     block.addEventListener('change', (e) => {
@@ -500,11 +532,45 @@ async function viewProdotto(idParam) {
       def.value = checked.includes(current) ? current : '';
     });
     block.onclick = async (e) => {
-      if (e.target.dataset.act !== 'remove') return;
-      if (!confirm('Rimuovere l\'attributo dal prodotto (e le relative opzioni ammesse)?')) return;
-      if (await act(() => q(sb.from('prodotti_attributi').delete().eq('id_prodotto', id).eq('id_attributo', aid)), 'Attributo rimosso')) reload();
+      if (!e.target.closest('[data-act=remove]')) return;
+      const pending = block.dataset.new === '1';
+      if (!pending && !confirm('Rimuovere l\'attributo dal prodotto (e le relative opzioni ammesse)?')) return;
+      if (!pending && !(await act(() => q(sb.from('prodotti_attributi').delete().eq('id_prodotto', id).eq('id_attributo', aid)), 'Attributo rimosso'))) return;
+      const index = assegnati.findIndex((item) => item.id_attributo === aid);
+      const [removed] = assegnati.splice(index, 1);
+      configs = configs.filter((c) => c.id_attributo !== aid);
+      Object.keys(meshMappingsById).filter((m) => meshMappingsById[m] === aid).forEach((m) => { delete meshMappingsById[m]; delete originalMappings[m]; });
+      attrSelect.add(new Option(`${removed.attributi.nome} (${removed.attributi.tipo_attributo})`, aid));
+      block.remove();
+      $('#no-attr').hidden = assegnati.length > 0;
+      redrawMapping();
     };
-  });
+  };
+  $$('.attr-block').forEach(bindAttrBlock);
+
+  attrSelect.onchange = async () => {
+    const aid = num(attrSelect.value);
+    if (!aid) return;
+    attrSelect.disabled = true;
+    try {
+      const attribute = tuttiAttributi.find((a) => a.id_attributo === aid);
+      const ao = await q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(id_opzione, nome, attiva, ordine, id_materiale, valore_visibilita, materiali(id_materiale, nome, id_glb, risorse_glb(percorso_risorsa)))').eq('id_attributo', aid));
+      opzioniPerAttr[aid] = ao.filter((r) => r.abilitata && r.opzioni).map((r) => r.opzioni)
+        .sort((a, b) => a.ordine - b.ordine || a.nome.localeCompare(b.nome));
+      const orders = $$('#attr-blocks [data-f=ordine]').map((input) => Number(input.value) || 0);
+      const pa = { id_attributo: aid, attributi: { nome: attribute.nome, tipo_attributo: attribute.tipo_attributo }, id_opzione_default: null, ordine: orders.length ? Math.max(...orders) + 1 : 0, obbligatorio: true, pending: true };
+      assegnati.push(pa);
+      $('#attr-blocks').insertAdjacentHTML('beforeend', attrBlock(pa));
+      bindAttrBlock($('#attr-blocks').lastElementChild);
+      attrSelect.querySelector(`option[value="${aid}"]`).remove();
+      $('#no-attr').hidden = true;
+      redrawMapping();
+    } catch (error) {
+      toast(errMsg(error), true);
+    }
+    attrSelect.value = '';
+    attrSelect.disabled = false;
+  };
 
   if (previewMeasures.length) {
     const stage = $('#productPreview');
@@ -605,7 +671,7 @@ async function viewProdotto(idParam) {
 
 // ---------- attributi: elenco ----------
 async function viewAttributi() {
-  shell('<div class="empty">Caricamento…</div>', [['Anagrafica attributi / opzioni']]);
+  shell('<div class="empty">Caricamento…</div>', [['Attributi']]);
   const [attributi, ao] = await Promise.all([
     q(sb.from('attributi').select('*').order('nome')),
     q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(nome, attiva, ordine)')),
@@ -625,19 +691,19 @@ async function viewAttributi() {
         <td>${a.id_attributo_padre ? `Derivato da <em>${esc(nome(a.id_attributo_padre))}</em>` : 'Generale'}</td>
         <td>${opts.map((o) => `<span class="chip ${o.attiva ? '' : 'off'}">${esc(o.nome)}</span>`).join('') || '<span class="muted">—</span>'}</td>
         <td><span class="badge ${a.attivo ? 'ok' : 'no'}">${a.attivo ? 'Attivo' : 'Non attivo'}</span></td>
-        <td class="actions"><a class="btn small" href="#/attributi/${a.id_attributo}">Modifica</a> <button class="small danger" data-del="${a.id_attributo}">Elimina</button></td></tr>`;
+        <td class="actions"><a class="btn small" href="#/attributi/${a.id_attributo}">${btn('pencil', 'Modifica')}</a> <button class="small danger" data-del="${a.id_attributo}">${btn('trash', 'Elimina')}</button></td></tr>`;
     }).join('') : '<tr><td colspan="6" class="empty">Nessun attributo.</td></tr>';
   };
 
   shell(`
-    <div class="page-head"><div><h1>Anagrafica attributi / opzioni</h1><span class="muted">${attributi.length} attributi</span></div>
-      <div class="row"><input class="search" id="search" placeholder="Cerca…"><a class="btn primary shrink" href="#/attributi/nuovo">+ Nuovo attributo</a></div></div>
+    <div class="page-head"><div><h1>Attributi</h1><span class="muted">${attributi.length} attributi</span></div>
+      <div class="row"><div class="search-wrap">${icon('search')}<input class="search" id="search" placeholder="Cerca…"></div><a class="btn primary shrink" href="#/attributi/nuovo">${btn('plus', 'Nuovo attributo')}</a></div></div>
     <div class="card table-scroll"><table><thead><tr><th>Attributo</th><th>Tipo</th><th>Origine</th><th>Opzioni</th><th>Stato</th><th></th></tr></thead>
-    <tbody id="rows"></tbody></table></div>`, [['Anagrafica attributi / opzioni']]);
+    <tbody id="rows"></tbody></table></div>`, [['Attributi']]);
   draw();
   $('#search').oninput = (e) => draw(e.target.value);
   $('#rows').onclick = async (e) => {
-    const id = e.target.dataset.del;
+    const id = e.target.closest('[data-del]')?.dataset.del;
     if (!id) return;
     if (!confirm(`Eliminare l'attributo "${nome(Number(id))}" e tutte le sue opzioni?`)) return;
     if (await act(() => q(sb.from('attributi').delete().eq('id_attributo', id)), 'Attributo eliminato')) viewAttributi();
@@ -648,7 +714,7 @@ async function viewAttributi() {
 async function viewAttributo(idParam) {
   const isNew = idParam === 'nuovo';
   const id = isNew ? null : Number(idParam);
-  const crumbs = [['Anagrafica attributi / opzioni', '#/attributi'], [isNew ? 'Nuovo attributo' : `Attributo ${id}`]];
+  const crumbs = [['Attributi', '#/attributi'], [isNew ? 'Nuovo attributo' : `Attributo ${id}`]];
   shell('<div class="empty">Caricamento…</div>', crumbs);
 
   let attr = { nome: '', descrizione: '', tipo_attributo: 'Materiale', id_attributo_padre: null, attivo: true };
@@ -683,7 +749,7 @@ async function viewAttributo(idParam) {
       <td>${effetto(o)}</td>
       <td style="width:80px"><input type="number" data-f="ordine" value="${o ? o.ordine : next}" aria-label="Ordine"></td>
       <td><input type="checkbox" data-f="attiva" ${!o || o.attiva ? 'checked' : ''} aria-label="Attiva"></td>
-      <td class="actions">${o ? '<button class="small danger" type="button" data-act="del">Elimina</button>' : ''}</td></tr>`;
+      <td class="actions">${o ? `<button class="small danger" type="button" data-act="del">${btn('trash', 'Elimina')}</button>` : `<button class="small ghost" type="button" data-act="drop">${btn('close', 'Annulla')}</button>`}</td></tr>`;
 
   const abilitate = new Set(esposte.filter((e) => e.abilitata).map((e) => e.id_opzione));
   const nextOrdine = opzioni.length ? Math.max(...opzioni.map((o) => o.ordine)) + 1 : 0;
@@ -696,12 +762,13 @@ async function viewAttributo(idParam) {
     <section class="card"><h2>Opzioni</h2>
       <div class="table-scroll"><table><thead><tr><th>Nome</th><th>Descrizione</th><th>${attr.tipo_attributo === 'Materiale' ? 'Materiale' : 'Visibilità'}</th><th>Ordine</th><th>Attiva</th><th></th></tr></thead>
       <tbody id="opzioni">${opzioni.map((o) => opzioneRow(o)).join('')}${opzioneRow(null, nextOrdine)}</tbody></table></div>
-      ${attr.tipo_attributo === 'Materiale' ? '<div style="margin-top:.75rem"><a class="btn small" href="#/materiali/nuovo">+ Nuovo materiale</a></div>' : ''}
+      <div class="add-row row"><div class="shrink"><button type="button" id="add-option">${btn('plus', 'Aggiungi opzione')}</button></div>
+      ${attr.tipo_attributo === 'Materiale' ? `<div class="shrink"><a class="btn" href="#/materiali/nuovo">${btn('plus', 'Nuovo materiale')}</a></div>` : ''}</div>
     </section>`;
 
   shell(`
     <div class="page-head"><div><h1>${isNew ? 'Nuovo attributo' : esc(attr.nome)}</h1>
-      <span class="muted">${derivato ? 'Attributo derivato' : 'Attributo generale'}</span></div><a class="btn" href="#/attributi">Chiudi</a></div>
+      <span class="muted">${derivato ? 'Attributo derivato' : 'Attributo generale'}</span></div><a class="btn" href="#/attributi">${btn('close', 'Chiudi')}</a></div>
     <form class="card" id="form-attr">
       <h2>Dati attributo</h2>
       <div class="row">
@@ -762,18 +829,25 @@ async function viewAttributo(idParam) {
   $('#form-attr').onsubmit = (e) => { e.preventDefault(); $('#save-all').click(); };
   if (isNew || derivato) return;
 
+  $('#add-option').onclick = () => {
+    const orders = $$('#opzioni [data-f=ordine]').map((input) => Number(input.value) || 0);
+    $('#opzioni').insertAdjacentHTML('beforeend', opzioneRow(null, orders.length ? Math.max(...orders) + 1 : 0));
+    $('#opzioni tr:last-child [data-f=nome]').focus();
+  };
   $('#opzioni').onclick = async (e) => {
-    if (e.target.dataset.act !== 'del') return;
-    const oid = e.target.closest('tr').dataset.opz;
+    const action = e.target.closest('[data-act]')?.dataset.act;
+    const tr = e.target.closest('tr');
+    if (action === 'drop') { tr.remove(); return; }
+    if (action !== 'del') return;
     if (!confirm('Eliminare l\'opzione? Verrà tolta anche da attributi derivati e prodotti che la usano.')) return;
-    if (await act(() => q(sb.from('opzioni').delete().eq('id_opzione', oid)), 'Opzione eliminata')) reload();
+    if (await act(() => q(sb.from('opzioni').delete().eq('id_opzione', tr.dataset.opz)), 'Opzione eliminata')) tr.remove();
   };
 }
 
 // ---------- materiali ----------
 async function viewMateriali(idParam) {
   const focusNew = idParam === 'nuovo';
-  shell('<div class="empty">Caricamento…</div>', [['Anagrafica materiali']]);
+  shell('<div class="empty">Caricamento…</div>', [['Materiali']]);
   const [materiali, risorse] = await Promise.all([
     q(sb.from('materiali').select('*').order('nome')),
     q(sb.from('risorse_glb').select('id_glb, nome_file').eq('tipo_risorsa', 'Materiale').order('nome_file')),
@@ -785,26 +859,28 @@ async function viewMateriali(idParam) {
     <td><input data-f="descrizione" value="${esc(material?.descrizione)}" placeholder="Descrizione" aria-label="Descrizione"></td>
     <td><input data-f="rif" maxlength="200" value="${esc(material?.rif_materiale_interno)}" placeholder="Riferimento interno" aria-label="Riferimento interno"></td>
     <td><select data-f="glb" aria-label="GLB del materiale">${resourceOptions(material?.id_glb)}</select>
-      <label class="upload-button small">Carica GLB<input type="file" data-f="file" accept=".glb,model/gltf-binary" aria-label="Carica GLB materiale"></label>
+      <label class="upload-button small btn">${icon('upload')}<span>Carica GLB</span><input type="file" data-f="file" accept=".glb,model/gltf-binary" aria-label="Carica GLB materiale"></label>
       <span class="upload-status muted" data-upload-status></span></td>
-    <td class="actions">${material ? '<button class="small danger" type="button" data-act="delete">Elimina</button>' : ''}</td></tr>`;
+    <td class="actions">${material ? `<button class="small danger" type="button" data-act="delete">${btn('trash', 'Elimina')}</button>` : `<button class="small ghost" type="button" data-act="drop">${btn('close', 'Annulla')}</button>`}</td></tr>`;
 
   shell(`
-    <div class="page-head"><div><h1>Anagrafica materiali</h1><span class="muted">${materiali.length} materiali · associa un GLB dedicato a ciascun materiale</span></div>
-      <button class="btn primary shrink" type="button" id="new-material">+ Nuovo materiale</button></div>
+    <div class="page-head"><div><h1>Materiali</h1><span class="muted">${materiali.length} materiali · associa un GLB dedicato a ciascun materiale</span></div>
+      <button class="btn primary shrink" type="button" id="new-material">${btn('plus', 'Nuovo materiale')}</button></div>
     <section class="card table-scroll"><table><thead><tr><th>Nome</th><th>Descrizione</th><th>Riferimento interno</th><th>GLB</th><th></th></tr></thead>
       <tbody id="materials">${materiali.map(materialRow).join('')}${materialRow(null)}</tbody></table></section>
     <p class="muted">L'ultima riga vuota serve per creare un nuovo materiale. Il file caricato viene archiviato in Supabase Storage; per sostituirlo carica un nuovo GLB, per rimuoverlo scegli “nessun GLB”.</p>
     ${saveBar()}`,
-  [['Anagrafica materiali']]);
+  [['Materiali']]);
 
-  const newRow = $('#materials tr[data-material=new]');
-  const focusNewRow = () => {
+  const focusNewRow = (append) => {
+    if (append) $('#materials').insertAdjacentHTML('beforeend', materialRow(null));
+    const rowsNew = $$('#materials tr[data-material=new]');
+    const newRow = rowsNew[rowsNew.length - 1];
     newRow.scrollIntoView({ block: 'center' });
     $('[data-f=nome]', newRow).focus();
   };
-  $('#new-material').onclick = focusNewRow;
-  if (focusNew) focusNewRow();
+  $('#new-material').onclick = () => focusNewRow(true);
+  if (focusNew) focusNewRow(false);
 
   const uploadMaterialGlb = async (input) => {
     const file = input.files[0];
@@ -831,11 +907,13 @@ async function viewMateriali(idParam) {
   });
 
   $('#materials').onclick = async (event) => {
-    if (event.target.dataset.act !== 'delete') return;
+    const action = event.target.closest('[data-act]')?.dataset.act;
+    if (action === 'drop') { event.target.closest('tr').remove(); return; }
+    if (action !== 'delete') return;
     const materialId = event.target.closest('tr').dataset.material;
     const material = materiali.find((item) => String(item.id_materiale) === materialId);
     if (!confirm(`Eliminare il materiale "${material.nome}"? Le opzioni collegate resteranno senza materiale.`)) return;
-    if (await act(() => q(sb.from('materiali').delete().eq('id_materiale', materialId)), 'Materiale eliminato')) viewMateriali();
+    if (await act(() => q(sb.from('materiali').delete().eq('id_materiale', materialId)), 'Materiale eliminato')) event.target.closest('tr').remove();
   };
 
   const saveMaterials = async () => {
@@ -913,11 +991,11 @@ async function listiniWithDefault() {
 async function viewCodifica(idParam) {
   activeProductPreview?.dispose();
   activeProductPreview = null;
-  const crumbs = [['Codici e prezzi']];
+  const crumbs = [['Codifica e Pricing']];
   shell('<div class="empty">Caricamento…</div>', crumbs);
   const prodotti = await q(sb.from('prodotti').select('id_prodotto, nome').order('nome'));
   const id = idParam ? Number(idParam) : null;
-  const head = (extra = '') => `<div class="page-head"><div><h1>Codici e prezzi</h1><span class="muted">Combinazioni misure / attributi / opzioni con codice, descrizione commerciale e prezzo.</span></div></div>
+  const head = (extra = '') => `<div class="page-head"><div><h1>Codifica e Pricing</h1><span class="muted">Combinazioni misure / attributi / opzioni con codice, descrizione commerciale e prezzo.</span></div></div>
     <section class="card"><div class="row">${productSelect(prodotti, id)}${extra}</div></section>`;
   const bindSelect = () => { $('#sel-prodotto').onchange = (e) => go(e.target.value ? `#/codifica/${e.target.value}` : '#/codifica'); };
   if (!id) {
@@ -1052,14 +1130,40 @@ async function viewTest(idParam) {
   const token = ++productPreviewToken;
   activeProductPreview?.dispose();
   activeProductPreview = null;
-  const crumbs = [['Test prodotto']];
+  const crumbs = [['Final Check']];
   shell('<div class="empty">Caricamento…</div>', crumbs);
-  const prodotti = await q(sb.from('prodotti').select('id_prodotto, nome').order('nome'));
+  const prodotti = await q(sb.from('prodotti').select('id_prodotto, nome, validato').order('nome'));
   const id = idParam ? Number(idParam) : null;
-  const head = `<div class="page-head"><div><h1>Test prodotto</h1><span class="muted">Configura il prodotto e verifica codice, descrizione, prezzo e aspetto 3D.</span></div></div>`;
-  const bindSelect = () => { $('#sel-prodotto').onchange = (e) => go(e.target.value ? `#/test/${e.target.value}` : '#/test'); };
+  const picker = `<section class="card picker">
+      <div class="picker-head"><h2 style="margin:0">Prodotti <span class="muted" style="font-weight:400">· da validare in cima</span></h2>
+        <div class="search-wrap">${icon('search')}<input class="search" id="pk-search" placeholder="Filtra o cerca…" aria-label="Filtra prodotti"></div></div>
+      <div class="picker-list" id="pk-list" role="listbox"></div>
+      <div class="picker-actions" id="pk-actions"></div></section>`;
+  const drawPicker = (filter = '') => {
+    const f = filter.trim().toLowerCase();
+    const list = prodotti.filter((p) => !f || p.nome.toLowerCase().includes(f))
+      .sort((a, b) => Number(a.validato) - Number(b.validato) || a.nome.localeCompare(b.nome));
+    $('#pk-list').innerHTML = list.map((p) => `<a class="picker-item ${p.id_prodotto === id ? 'selected' : ''}" href="#/test/${p.id_prodotto}" role="option"><span>${esc(p.nome)}</span>
+      ${p.validato ? `<span class="badge ok">${icon('check')} Testato</span>` : '<span class="badge warn">Da validare</span>'}</a>`).join('') || '<div class="empty">Nessun prodotto.</div>';
+    $('#pk-list .selected')?.scrollIntoView({ block: 'nearest' });
+    const current = prodotti.find((p) => p.id_prodotto === id);
+    $('#pk-actions').innerHTML = current ? (current.validato
+      ? `<span class="badge ok">${icon('check')} Testato e pronto all'uso</span><button type="button" id="pk-toggle">Rimuovi il flag</button>`
+      : `<button type="button" class="success" id="pk-toggle">${btn('seal', 'Segna come testato e pronto all\'uso')}</button>`) : '';
+    const toggle = $('#pk-toggle');
+    if (toggle) toggle.onclick = async () => {
+      const next = !current.validato;
+      toggle.disabled = true;
+      const ok = await act(() => q(sb.from('prodotti').update({ validato: next, validato_il: next ? new Date().toISOString() : null }).eq('id_prodotto', id)), next ? 'Prodotto segnato come testato' : 'Flag rimosso');
+      if (ok) current.validato = next;
+      drawPicker($('#pk-search').value);
+    };
+  };
+  const bindPicker = () => { drawPicker(); $('#pk-search').oninput = (e) => drawPicker(e.target.value); };
+  const head = `<div class="page-head"><div><h1>Final Check</h1><span class="muted">Configura il prodotto e verifica codice, descrizione, prezzo e aspetto 3D.</span></div></div>`;
+  const bindSelect = bindPicker;
   if (!id) {
-    shell(`${head}<section class="card">${productSelect(prodotti, null)}</section><p class="empty">Seleziona un prodotto da provare.</p>`, crumbs);
+    shell(`${head}${picker}<p class="empty">Seleziona un prodotto da provare.</p>`, crumbs);
     return bindSelect();
   }
 
@@ -1069,7 +1173,8 @@ async function viewTest(idParam) {
   const optionById = new Map(attributes.flatMap((a) => a.options.map((o) => [o.id_opzione, o])));
 
   shell(`${head}
-    <section class="card"><div class="row">${productSelect(prodotti, id)}
+    ${picker}
+    <section class="card"><div class="row">
       <div class="field"><label for="t-misura">Misura</label><select id="t-misura">${misure.map((m) => `<option value="${m.id_misura}">${esc(measureLabel(m))}${m.id_glb ? '' : ' (senza GLB)'}</option>`).join('')}</select></div>
       <div class="field"><label for="t-listino">Listino</label><select id="t-listino">${listini.map((l) => `<option value="${l.id_listino}">${esc(l.nome)} (${esc(l.valuta)})</option>`).join('')}</select></div></div></section>
     <div class="test-layout">
@@ -1110,7 +1215,7 @@ async function viewTest(idParam) {
         <dt>Descrizione commerciale</dt><dd>${code.descrizione_articolo ? esc(code.descrizione_articolo) : '<span class="muted">non assegnata</span>'}</dd>
         <dt>Prezzo</dt><dd class="price">${price == null ? '<span class="muted">non definito</span>' : `${Number(price).toLocaleString('it-IT', { style: 'currency', currency: listino.valuta })}`}</dd>
         ${code.attiva ? '' : '<dt>Stato</dt><dd><span class="badge no">Combinazione non attiva</span></dd>'}</dl>`
-        : '<p class="muted">Combinazione non codificata: assegna codice e prezzo in “Codici e prezzi”.</p>';
+        : '<p class="muted">Combinazione non codificata: assegna codice e prezzo in “Codifica e Pricing”.</p>';
     } catch (error) {
       if (revision === resultRevision) box.textContent = errMsg(error);
     }

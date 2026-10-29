@@ -367,8 +367,7 @@ async function viewProdotto(idParam) {
       if (!attribute) return '';
       const allowedIds = new Set(configs.filter((config) => config.id_attributo === attributeId).map((config) => config.id_opzione));
       const options = (previewOptionsByAttr[attributeId] || []).filter((option) => allowedIds.has(option.id_opzione));
-      return `<div class="field"><label for="preview-attr-${attributeId}">${esc(attribute.attributi.nome)}</label>
-        ${attribute.attributi.descrizione ? `<p class="muted">${esc(attribute.attributi.descrizione)}</p>` : ''}
+      return `<div class="field preview-attr-row"><label for="preview-attr-${attributeId}">${esc(attribute.attributi.nome)}${attribute.attributi.descrizione ? `: ${esc(attribute.attributi.descrizione)}` : ''}</label>
         <select id="preview-attr-${attributeId}" data-preview-attribute="${attributeId}">
           <option value="">— seleziona —</option>${options.map((option) => `<option value="${option.id_opzione}" ${String(option.id_opzione) === String(attribute.id_opzione_default || '') ? 'selected' : ''}>${esc(optionLabel(option))}</option>`).join('')}
         </select></div>`;
@@ -1165,8 +1164,7 @@ async function viewCodifica(idParam) {
       <td class="col-combination">${r.pairs.map(([a, o]) => {
         const attribute = codingAttributes.find((x) => x.id === a);
         const option = optionByKey.get(`${a}:${o}`);
-        return `<div class="combo-attribute"><div>${esc(attribute.nome)}${attribute.descrizione ? ` : ${esc(attribute.descrizione)}` : ''}</div>
-          <div>${esc(option.nome)}${option.descrizione ? ` : ${esc(option.descrizione)}` : ''}</div></div>`;
+        return `<div class="combo-attribute">"${esc(attribute.nome)}" : "${esc(attribute.descrizione)}" = "${esc(option.nome)}" : "${esc(option.descrizione)}"</div>`;
       }).join('') || '<span class="muted">—</span>'}</td>
       <td class="col-code"><input data-f="codice" maxlength="100" value="${esc(r.codice)}" aria-label="Codice commerciale"></td>
       <td class="col-descr"><input data-f="descr" value="${esc(r.descr)}" aria-label="Descrizione commerciale"></td>

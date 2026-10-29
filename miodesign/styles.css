@@ -163,13 +163,13 @@ th.col-code, td.col-code { width: 150px; }
 td.col-descr { min-width: 360px; width: 45%; }
 .coding-table { min-width: 1160px; }
 .coding-table .col-measure { width: 180px; min-width: 180px; }
-.coding-table .col-combination { width: 340px; min-width: 340px; }
+.coding-table .col-combination { width: 520px; min-width: 520px; }
 .coding-table .col-code { width: 150px; }
 .coding-table .col-descr { width: 360px; min-width: 360px; }
 .coding-table .col-price { width: 130px; }
 .combo-attribute { margin-bottom: .45rem; }
 .combo-attribute:last-child { margin-bottom: 0; }
-.combo-attribute > div + div { padding-left: .65rem; }
+main:has(.coding-table) { max-width: none; }
 main:has(.mesh-layout) { max-width: 1600px; }
 .mesh-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
 .mesh-layout .preview-sticky { position: sticky; top: 4.5rem; }
@@ -177,3 +177,6 @@ main:has(.mesh-layout) { max-width: 1600px; }
 .mesh-layout .product-preview-grid { grid-template-columns: 1fr; }
 .mesh-layout .product-preview-stage { height: min(55vh, 520px); }
 @media (max-width: 1100px) { .mesh-layout { grid-template-columns: 1fr; } .mesh-layout .preview-sticky { position: static; } }
+.preview-attr-row { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }
+.preview-attr-row label { margin: 0; flex: 1 1 auto; }
+.preview-attr-row select { flex: 0 1 60%; width: auto; min-width: 0; margin-left: auto; }

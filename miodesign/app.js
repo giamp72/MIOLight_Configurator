@@ -1149,8 +1149,8 @@ async function viewCodifica(idParam) {
   shell(`${head(`<div class="field"><label for="sel-listino">Listino</label><select id="sel-listino">${listini.map((l) => `<option value="${l.id_listino}">${esc(l.nome)} (${esc(l.valuta)})</option>`).join('')}</select></div>
       <div class="field shrink"><label>&nbsp;</label><button type="button" class="small" id="new-listino">+ Nuovo listino</button></div>`)}
     <section class="card">
-      <div class="row"><div class="field"><label for="flt-misura">Misura</label><select id="flt-misura"><option value="">Tutte</option>${misure.map((m) => `<option value="${m.id_misura}">${esc(measureLabel(m))}</option>`).join('')}</select></div>
-        <div class="field"><label for="flt-text">Cerca</label><input id="flt-text" class="search" placeholder="Attributo, opzione, misura…"></div></div>
+      <div class="row filters"><div class="field"><label for="flt-misura">Misura</label><select id="flt-misura"><option value="">Tutte</option>${misure.map((m) => `<option value="${m.id_misura}">${esc(measureLabel(m))}</option>`).join('')}</select></div>
+        <div class="field grow"><label for="flt-text">Cerca</label><input id="flt-text" class="search" placeholder="Attributo, opzione, misura…"></div></div>
       <p class="muted" id="combo-count"></p>
       <div class="table-scroll"><table class="coding-table"><thead><tr><th class="col-measure">Misura</th><th class="col-combination">Combinazione</th><th class="col-code">Codice commerciale</th><th class="col-descr">Descrizione commerciale</th><th class="col-price">Prezzo</th></tr></thead><tbody id="combos"></tbody></table></div>
     </section>${saveBar()}`, crumbs);
@@ -1164,7 +1164,7 @@ async function viewCodifica(idParam) {
       <td class="col-combination">${r.pairs.map(([a, o]) => {
         const attribute = codingAttributes.find((x) => x.id === a);
         const option = optionByKey.get(`${a}:${o}`);
-        return `<div class="combo-attribute">"${esc(attribute.nome)}" : "${esc(attribute.descrizione)}" = "${esc(option.nome)}" : "${esc(option.descrizione)}"</div>`;
+        return `<div class="combo-attribute">${esc(attribute.nome)}${attribute.descrizione ? `: ${esc(attribute.descrizione)}` : ''} = ${esc(option.nome)}${option.descrizione ? `: ${esc(option.descrizione)}` : ''}</div>`;
       }).join('') || '<span class="muted">—</span>'}</td>
       <td class="col-code"><input data-f="codice" maxlength="100" value="${esc(r.codice)}" aria-label="Codice commerciale"></td>
       <td class="col-descr"><input data-f="descr" value="${esc(r.descr)}" aria-label="Descrizione commerciale"></td>

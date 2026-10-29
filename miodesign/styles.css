@@ -147,3 +147,22 @@ main:has(.test-layout) { max-width: none; }
 .picker-actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-top: .75rem; }
 .brand-logo .ico { width: 55%; height: 55%; }
 [hidden] { display: none !important; }
+
+.menu-step { font-size: .95rem; }
+.glb-field { display: flex; align-items: center; gap: .4rem; min-width: 240px; }
+.glb-field input { flex: 1 1 auto; min-width: 0; }
+.glb-field .upload-button { flex: none; }
+td.col-dim, th.col-dim { width: 84px; }
+td.col-dim input, td.col-dim select { width: 84px; }
+th.col-narrow, td.col-narrow { width: 56px; text-align: center; }
+.chip { white-space: normal; }
+td .chip { display: block; width: fit-content; }
+th.col-code, td.col-code { width: 150px; }
+td.col-descr { min-width: 360px; width: 45%; }
+main:has(.mesh-layout) { max-width: 1600px; }
+.mesh-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.mesh-layout .preview-sticky { position: sticky; top: 4.5rem; }
+.mesh-layout #mesh-map-rows { max-height: 70vh; overflow: auto; }
+.mesh-layout .product-preview-grid { grid-template-columns: 1fr; }
+.mesh-layout .product-preview-stage { height: min(55vh, 520px); }
+@media (max-width: 1100px) { .mesh-layout { grid-template-columns: 1fr; } .mesh-layout .preview-sticky { position: static; } }

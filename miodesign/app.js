@@ -203,7 +203,7 @@ function viewLogin() {
 }
 
 // ---------- menu ----------
-function viewMenu() {
+async function viewMenu() {
   shell(`
     <div class="page-head"><div><h1>Menu</h1><span class="muted">Seleziona l'area da gestire.</span></div></div>
     <div class="menu-grid">
@@ -213,8 +213,21 @@ function viewMenu() {
         ['#/prodotti', 'cube', 'tone-blue', 'Prodotti', 'Crea e modifica i prodotti, con misure, attributi e mappatura mesh.'],
         ['#/codifica', 'tag', 'tone-teal', 'Codifica e Pricing', 'Per ogni combinazione assegna codice commerciale, descrizione e prezzo.'],
         ['#/test', 'seal', 'tone-green', 'Final Check', 'Verifica codice, prezzo e anteprima 3D e segna il prodotto come testato.'],
-      ].map(([href, ic, tone, title, text], n) => `<a class="menu-tile" href="${href}"><span class="menu-icon ${tone}">${icon(ic)}</span><span><strong>${title}</strong><span class="muted">${text}</span></span><span class="menu-step">${n + 1}</span></a>`).join('')}
+      ].map(([href, ic, tone, title, text], n) => `<a class="menu-tile" href="${href}"><span class="menu-icon ${tone}">${icon(ic)}</span><span><strong>${title}</strong><span class="muted">${text}</span></span><span class="menu-step" data-count="${n}">…</span></a>`).join('')}
     </div>`);
+  try {
+    const count = async (table) => (await sb.from(table).select('*', { count: 'exact', head: true })).count ?? 0;
+    const [nMat, nAttr, nProd, nCod, prezzi, nValid] = await Promise.all([
+      count('materiali'), count('attributi'), count('prodotti'), count('codifica'),
+      qAll(() => sb.from('prezzi').select('id_codice').order('id_codice')),
+      sb.from('prodotti').select('*', { count: 'exact', head: true }).eq('validato', true).then((r) => r.count ?? 0),
+    ]);
+    const priced = new Set(prezzi.map((p) => p.id_codice)).size;
+    const values = [nMat, nAttr, nProd, `${priced}/${nCod}`, `${nValid}/${nProd}`];
+    $$('[data-count]').forEach((el) => { el.textContent = values[Number(el.dataset.count)]; });
+  } catch (e) {
+    $$('[data-count]').forEach((el) => { el.textContent = ''; });
+  }
 }
 
 // ---------- prodotti: elenco ----------
@@ -298,17 +311,17 @@ async function viewProdotto(idParam) {
   }
 
   const misuraRow = (m) => `<tr data-misura="${m?.id_misura ?? 'new'}" data-glb="${m?.id_glb ?? ''}">
-      <td><input type="number" step="any" data-f="dim_x" value="${esc(m?.dim_x)}" aria-label="Larghezza"></td>
-      <td><input type="number" step="any" data-f="dim_y" value="${esc(m?.dim_y)}" aria-label="Altezza"></td>
-      <td><input type="number" step="any" data-f="dim_z" value="${esc(m?.dim_z)}" aria-label="Profondità"></td>
-      <td><select data-f="unita_misura">${['cm', 'mm'].map((u) => `<option ${((m?.unita_misura) || 'cm') === u ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
-      <td><span data-glb-name>${m?.risorse_glb ? `<span class="chip">${esc(m.risorse_glb.nome_file)}</span>` : '<span class="muted">Nessun GLB</span>'}</span>
-        <label class="upload-button small btn">${icon('upload')}<span>Carica GLB</span><input type="file" data-f="glb" accept=".glb,model/gltf-binary" aria-label="Carica GLB oggetto"></label><span class="upload-status muted" data-upload-status></span></td>
+      <td class="col-dim"><input type="number" step="any" data-f="dim_x" value="${esc(m?.dim_x)}" aria-label="Larghezza"></td>
+      <td class="col-dim"><input type="number" step="any" data-f="dim_y" value="${esc(m?.dim_y)}" aria-label="Altezza"></td>
+      <td class="col-dim"><input type="number" step="any" data-f="dim_z" value="${esc(m?.dim_z)}" aria-label="Profondità"></td>
+      <td class="col-dim"><select data-f="unita_misura">${['cm', 'mm'].map((u) => `<option ${((m?.unita_misura) || 'cm') === u ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
+      <td><div class="glb-field"><input data-glb-name readonly value="${esc(m?.risorse_glb?.nome_file)}" placeholder="Nessun GLB" aria-label="Nome GLB">
+        <label class="upload-button small btn">${icon('upload')}<span>Carica GLB</span><input type="file" data-f="glb" accept=".glb,model/gltf-binary" aria-label="Carica GLB oggetto"></label></div><span class="upload-status muted" data-upload-status></span></td>
       <td class="actions">${m ? `<button class="small danger" data-act="clear-glb">Rimuovi GLB</button> <button class="small danger" data-act="del">${btn('trash', 'Elimina')}</button>` : `<button class="small ghost" data-act="drop">${btn('close', 'Annulla')}</button>`}</td></tr>`;
 
   const attrBlock = (pa) => {
     const opts = opzioniPerAttr[pa.id_attributo] || [];
-    const sel = new Set(configs.filter((c) => c.id_attributo === pa.id_attributo).map((c) => c.id_opzione));
+    const sel = pa.pending ? new Set(opts.map((o) => o.id_opzione)) : new Set(configs.filter((c) => c.id_attributo === pa.id_attributo).map((c) => c.id_opzione));
     return `<div class="attr-block" data-attr="${pa.id_attributo}" ${pa.pending ? 'data-new="1"' : ''}>
       <h3>${esc(pa.attributi.nome)} <span class="badge">${esc(pa.attributi.tipo_attributo)}</span></h3>
       ${pa.attributi.descrizione ? `<p class="muted">${esc(pa.attributi.descrizione)}</p>` : ''}
@@ -383,11 +396,12 @@ async function viewProdotto(idParam) {
       <div class="row"><div><label for="nuovo-attr">Aggiungi attributo</label><select id="nuovo-attr">
         <option value="">— seleziona —</option>${assegnabili.map((a) => `<option value="${a.id_attributo}">${esc(attributeLabel(a))} (${esc(a.tipo_attributo)})</option>`).join('')}</select></div>
         </div><p class="muted">Puoi aggiungerne quanti vuoi: tutto viene salvato con il pulsante in basso.</p></section>
+    <div class="mesh-layout">
     <section class="card"><h2>Mappatura mesh</h2>
       <p class="muted">Per ogni mesh puoi assegnare separatamente un attributo materiale e un attributo di visibilità. Ogni GLB ha la propria mappatura.</p>
       <p class="muted">Mesh selezionata: <code id="mapping-highlighted">nessuna</code></p>
       ${meshMappingSection()}</section>
-    <section class="card"><h2>Prova configurazione</h2>
+    <section class="card preview-sticky"><h2>Prova configurazione</h2>
       <p class="muted">Seleziona gli attributi e verifica in anteprima materiali e visibilità. Usa “Evidenzia” nella mappatura per individuare una mesh nel modello.</p>
       ${previewMeasures.length ? `<div class="product-preview-grid">
         <div><label for="preview-measure">Modello per misura</label>
@@ -396,7 +410,8 @@ async function viewProdotto(idParam) {
           <p class="preview-status muted" id="preview-status" role="status">Caricamento del modello…</p>
         </div>
         <div class="preview-attributes"><h3>Attributi del GLB</h3><div id="preview-attributes">${previewAttributesMarkup(previewMeasures[0].id_misura)}</div></div></div>`
-      : '<p class="empty">Associa un GLB a una misura per avviare la prova.</p>'}</section>`}
+      : '<p class="empty">Associa un GLB a una misura per avviare la prova.</p>'}</section>
+    </div>`}
     ${saveBar(isNew ? 'Crea prodotto' : 'Salva tutto')}`,
     [['Prodotti', '#/prodotti'], [isNew ? 'Nuovo prodotto' : `Prodotto ${id}`]]);
 
@@ -472,7 +487,7 @@ async function viewProdotto(idParam) {
     try {
       const resource = await uploadGlbResource(file, 'Oggetto', `${id}/oggetti/${tr.dataset.misura}`);
       tr.dataset.glb = resource.id_glb;
-      $('[data-glb-name]', tr).innerHTML = `<span class="chip">${esc(file.name)}</span>`;
+      $('[data-glb-name]', tr).value = file.name;
       status.textContent = 'Caricato: premi Salva tutto per associarlo';
     } catch (error) {
       status.textContent = '';
@@ -494,7 +509,7 @@ async function viewProdotto(idParam) {
     if (action === 'drop') { tr.remove(); return; }
     if (action === 'clear-glb') {
       tr.dataset.glb = '';
-      $('[data-glb-name]', tr).innerHTML = '<span class="muted">Nessun GLB</span>';
+      $('[data-glb-name]', tr).value = '';
       $('[data-upload-status]', tr).textContent = 'Rimosso: premi Salva tutto per confermare';
       return;
     }
@@ -704,24 +719,22 @@ async function viewProdotto(idParam) {
 // ---------- attributi: elenco ----------
 async function viewAttributi() {
   shell('<div class="empty">Caricamento…</div>', [['Attributi']]);
-  const [attributi, ao] = await Promise.all([
+  const [attributi, usati] = await Promise.all([
     q(sb.from('attributi').select('*').order('nome')),
-    q(sb.from('attributi_opzioni').select('id_attributo, abilitata, opzioni(nome, descrizione, attiva, ordine)')),
+    qAll(() => sb.from('prodotti_attributi').select('id_attributo, id_prodotto').order('id_prodotto').order('id_attributo')),
   ]);
-  const byAttr = {};
-  ao.filter((r) => r.abilitata && r.opzioni).forEach((r) => (byAttr[r.id_attributo] ||= []).push(r.opzioni));
+  const usedAttrs = new Set(usati.map((r) => r.id_attributo));
   const nome = (id) => attributi.find((a) => a.id_attributo === id)?.nome ?? '';
 
   const draw = (filter = '') => {
     const f = filter.toLowerCase();
-    const rows = attributi.filter((a) => !f || `${a.nome} ${a.descrizione || ''} ${(byAttr[a.id_attributo] || []).map((o) => `${o.nome} ${o.descrizione || ''}`).join(' ')}`.toLowerCase().includes(f));
+    const rows = attributi.filter((a) => !f || `${a.nome} ${a.descrizione || ''}`.toLowerCase().includes(f));
     $('#rows').innerHTML = rows.length ? rows.map((a) => {
-      const opts = (byAttr[a.id_attributo] || []).sort((x, y) => x.ordine - y.ordine || x.nome.localeCompare(y.nome));
       return `<tr>
         <td><a href="#/attributi/${a.id_attributo}"><strong>${esc(a.nome)}</strong></a><div class="muted">${esc(a.descrizione)}</div></td>
         <td>${esc(a.tipo_attributo)}</td>
         <td>${a.id_attributo_padre ? `Derivato da <em>${esc(nome(a.id_attributo_padre))}</em>` : 'Generale'}</td>
-        <td>${opts.map((o) => `<span class="chip ${o.attiva ? '' : 'off'}">${esc(optionLabel(o))}</span>`).join('') || '<span class="muted">—</span>'}</td>
+        <td><span class="badge ${usedAttrs.has(a.id_attributo) ? 'ok' : 'no'}">${usedAttrs.has(a.id_attributo) ? 'Usato' : 'Non usato'}</span></td>
         <td><span class="badge ${a.attivo ? 'ok' : 'no'}">${a.attivo ? 'Attivo' : 'Non attivo'}</span></td>
         <td class="actions"><a class="btn small" href="#/attributi/${a.id_attributo}">${btn('pencil', 'Modifica')}</a> <button class="small danger" data-del="${a.id_attributo}">${btn('trash', 'Elimina')}</button></td></tr>`;
     }).join('') : '<tr><td colspan="6" class="empty">Nessun attributo.</td></tr>';
@@ -730,7 +743,7 @@ async function viewAttributi() {
   shell(`
     <div class="page-head"><div><h1>Attributi</h1><span class="muted">${attributi.length} attributi</span></div>
       <div class="row"><div class="search-wrap">${icon('search')}<input class="search" id="search" placeholder="Cerca…"></div><a class="btn primary shrink" href="#/attributi/nuovo">${btn('plus', 'Nuovo attributo')}</a></div></div>
-    <div class="card table-scroll"><table><thead><tr><th>Attributo</th><th>Tipo</th><th>Origine</th><th>Opzioni</th><th>Stato</th><th></th></tr></thead>
+    <div class="card table-scroll"><table><thead><tr><th>Attributo</th><th>Tipo</th><th>Origine</th><th>Utilizzo</th><th>Stato</th><th></th></tr></thead>
     <tbody id="rows"></tbody></table></div>`, [['Attributi']]);
   draw();
   $('#search').oninput = (e) => draw(e.target.value);
@@ -751,6 +764,7 @@ async function viewAttributo(idParam) {
 
   let attr = { nome: '', descrizione: '', tipo_attributo: 'Materiale', id_attributo_padre: null, attivo: true };
   let opzioni = [], materiali = [], generali = [], padreOpzioni = [], esposte = [];
+  const usedOptions = new Set();
   const [mat, gen] = await Promise.all([
     q(sb.from('materiali').select('id_materiale, nome').order('nome')),
     q(sb.from('attributi').select('id_attributo, nome, descrizione, tipo_attributo').is('id_attributo_padre', null).order('nome')),
@@ -767,6 +781,14 @@ async function viewAttributo(idParam) {
       ]);
     } else {
       opzioni = await q(sb.from('opzioni').select('*').eq('id_attributo', id).order('ordine').order('nome'));
+      const optIds = opzioni.map((o) => o.id_opzione);
+      if (optIds.length) {
+        const [cfgUse, derUse] = await Promise.all([
+          qAll(() => sb.from('configurazioni').select('id_opzione, id_prodotto').in('id_opzione', optIds).order('id_prodotto')),
+          qAll(() => sb.from('attributi_opzioni').select('id_opzione, id_attributo').in('id_opzione', optIds).neq('id_attributo', id).order('id_attributo')),
+        ]);
+        [...cfgUse, ...derUse].forEach((r) => usedOptions.add(r.id_opzione));
+      }
     }
   }
   const derivato = !!attr.id_attributo_padre;
@@ -781,6 +803,7 @@ async function viewAttributo(idParam) {
       <td>${effetto(o)}</td>
       <td style="width:80px"><input type="number" data-f="ordine" value="${o ? o.ordine : next}" aria-label="Ordine"></td>
       <td><input type="checkbox" data-f="attiva" ${!o || o.attiva ? 'checked' : ''} aria-label="Attiva"></td>
+      <td class="col-narrow">${o ? `<span class="badge ${usedOptions.has(o.id_opzione) ? 'ok' : 'no'}">${usedOptions.has(o.id_opzione) ? 'SI' : 'NO'}</span>` : ''}</td>
       <td class="actions">${o ? `<button class="small danger" type="button" data-act="del">${btn('trash', 'Elimina')}</button>` : `<button class="small ghost" type="button" data-act="drop">${btn('close', 'Annulla')}</button>`}</td></tr>`;
 
   const abilitate = new Set(esposte.filter((e) => e.abilitata).map((e) => e.id_opzione));
@@ -792,7 +815,8 @@ async function viewAttributo(idParam) {
       <div class="opt-grid">${padreOpzioni.map((o) => `<label class="check"><input type="checkbox" data-opt="${o.id_opzione}" ${abilitate.has(o.id_opzione) ? 'checked' : ''}> ${esc(optionLabel(o))}${o.attiva ? '' : ' <span class="muted">(non attiva)</span>'}</label>`).join('') || '<span class="muted">L\'attributo padre non ha opzioni.</span>'}</div>
 </section>` : `
     <section class="card"><h2>Opzioni</h2>
-      <div class="table-scroll"><table><thead><tr><th>Nome</th><th>Descrizione</th><th>${attr.tipo_attributo === 'Materiale' ? 'Materiale' : 'Visibilità'}</th><th>Ordine</th><th>Attiva</th><th></th></tr></thead>
+      <div class="search-wrap" style="margin-bottom:.75rem">${icon('search')}<input class="search" id="opt-search" placeholder="Filtra opzioni…" aria-label="Filtra opzioni"></div>
+      <div class="table-scroll"><table><thead><tr><th>Nome</th><th>Descrizione</th><th>${attr.tipo_attributo === 'Materiale' ? 'Materiale' : 'Visibilità'}</th><th>Ordine</th><th>Attiva</th><th class="col-narrow">Usata</th><th></th></tr></thead>
       <tbody id="opzioni">${opzioni.map((o) => opzioneRow(o)).join('')}${opzioneRow(null, nextOrdine)}</tbody></table></div>
       <div class="add-row row"><div class="shrink"><button type="button" id="add-option">${btn('plus', 'Aggiungi opzione')}</button></div>
       ${attr.tipo_attributo === 'Materiale' ? `<div class="shrink"><a class="btn" href="#/materiali/nuovo">${btn('plus', 'Nuovo materiale')}</a></div>` : ''}</div>
@@ -861,6 +885,13 @@ async function viewAttributo(idParam) {
   $('#form-attr').onsubmit = (e) => { e.preventDefault(); $('#save-all').click(); };
   if (isNew || derivato) return;
 
+  $('#opt-search').oninput = (e) => {
+    const f = e.target.value.trim().toLowerCase();
+    $$('#opzioni tr').forEach((tr) => {
+      const text = ['nome', 'descrizione'].map((n) => $(`[data-f=${n}]`, tr).value).join(' ').toLowerCase();
+      tr.hidden = !!f && (tr.dataset.opz === 'new' || !text.includes(f));
+    });
+  };
   $('#add-option').onclick = () => {
     const orders = $$('#opzioni [data-f=ordine]').map((input) => Number(input.value) || 0);
     $('#opzioni').insertAdjacentHTML('beforeend', opzioneRow(null, orders.length ? Math.max(...orders) + 1 : 0));
@@ -880,29 +911,61 @@ async function viewAttributo(idParam) {
 async function viewMateriali(idParam) {
   const focusNew = idParam === 'nuovo';
   shell('<div class="empty">Caricamento…</div>', [['Materiali']]);
-  const [materiali, risorse] = await Promise.all([
+  const [materiali, risorse, usedRows] = await Promise.all([
     q(sb.from('materiali').select('*').order('nome')),
-    q(sb.from('risorse_glb').select('id_glb, nome_file').eq('tipo_risorsa', 'Materiale').order('nome_file')),
+    q(sb.from('risorse_glb').select('id_glb, nome_file, percorso_risorsa').eq('tipo_risorsa', 'Materiale')),
+    qAll(() => sb.from('opzioni').select('id_opzione, id_materiale').not('id_materiale', 'is', null).order('id_opzione')),
   ]);
-  const resourceOptions = (selectedId) => `<option value="">— nessun GLB —</option>${risorse.map((resource) =>
-    `<option value="${resource.id_glb}" ${String(resource.id_glb) === String(selectedId || '') ? 'selected' : ''}>${esc(resource.nome_file)}</option>`).join('')}`;
-  const materialRow = (material) => `<tr data-material="${material?.id_materiale ?? 'new'}">
+  const resources = new Map(risorse.map((resource) => [String(resource.id_glb), resource]));
+  const usedMaterials = new Set(usedRows.map((o) => String(o.id_materiale)));
+  const usedBadge = (material) => (!material ? '' : usedMaterials.has(String(material.id_materiale)) ? '<span class="badge ok">Usato</span>' : '<span class="badge no">Non usato</span>');
+  const materialRow = (material) => `<tr data-material="${material?.id_materiale ?? 'new'}" data-glb="${material?.id_glb ?? ''}">
     <td><input data-f="nome" maxlength="150" value="${esc(material?.nome)}" placeholder="${material ? 'Nome materiale' : 'Nuovo materiale: nome'}" aria-label="Nome materiale"></td>
     <td><input data-f="descrizione" value="${esc(material?.descrizione)}" placeholder="Descrizione" aria-label="Descrizione"></td>
-    <td><input data-f="rif" maxlength="200" value="${esc(material?.rif_materiale_interno)}" placeholder="Riferimento interno" aria-label="Riferimento interno"></td>
-    <td><select data-f="glb" aria-label="GLB del materiale">${resourceOptions(material?.id_glb)}</select>
-      <label class="upload-button small btn">${icon('upload')}<span>Carica GLB</span><input type="file" data-f="file" accept=".glb,model/gltf-binary" aria-label="Carica GLB materiale"></label>
+    <td><div class="glb-field"><input data-glb-name readonly value="${esc(resources.get(String(material?.id_glb))?.nome_file)}" placeholder="Nessun GLB" aria-label="GLB del materiale">
+      <label class="upload-button small btn">${icon('upload')}<span>Carica</span><input type="file" data-f="file" accept=".glb,model/gltf-binary" aria-label="Carica GLB materiale"></label></div>
       <span class="upload-status muted" data-upload-status></span></td>
+    <td>${usedBadge(material)}</td>
     <td class="actions">${material ? `<button class="small danger" type="button" data-act="delete">${btn('trash', 'Elimina')}</button>` : `<button class="small ghost" type="button" data-act="drop">${btn('close', 'Annulla')}</button>`}</td></tr>`;
 
   shell(`
     <div class="page-head"><div><h1>Materiali</h1><span class="muted">${materiali.length} materiali · associa un GLB dedicato a ciascun materiale</span></div>
-      <button class="btn primary shrink" type="button" id="new-material">${btn('plus', 'Nuovo materiale')}</button></div>
-    <section class="card table-scroll"><table><thead><tr><th>Nome</th><th>Descrizione</th><th>Riferimento interno</th><th>GLB</th><th></th></tr></thead>
+      <div class="row"><div class="search-wrap">${icon('search')}<input class="search" id="search" placeholder="Cerca…" aria-label="Filtra materiali"></div>
+        <button class="btn danger shrink" type="button" id="delete-all" ${materiali.length ? '' : 'disabled'}>${btn('trash', 'Elimina tutti')}</button>
+        <button class="btn primary shrink" type="button" id="new-material">${btn('plus', 'Nuovo materiale')}</button></div></div>
+    <section class="card table-scroll"><table><thead><tr><th>Nome</th><th>Descrizione</th><th>GLB</th><th>Utilizzo</th><th></th></tr></thead>
       <tbody id="materials">${materiali.map(materialRow).join('')}${materialRow(null)}</tbody></table></section>
-    <p class="muted">L'ultima riga vuota serve per creare un nuovo materiale. Il file caricato viene archiviato in Supabase Storage; per sostituirlo carica un nuovo GLB, per rimuoverlo scegli “nessun GLB”.</p>
+    <p class="muted">L'ultima riga vuota serve per creare un nuovo materiale. Il GLB viene archiviato in Supabase Storage; per sostituirlo carica un nuovo GLB. Eliminando un materiale viene eliminato anche il suo GLB e il riferimento sulle opzioni degli attributi viene svuotato.</p>
     ${saveBar()}`,
   [['Materiali']]);
+
+  $('#search').oninput = (event) => {
+    const f = event.target.value.trim().toLowerCase();
+    $$('#materials tr').forEach((row) => {
+      const text = ['nome', 'descrizione'].map((name) => $(`[data-f=${name}]`, row).value).join(' ').toLowerCase();
+      row.hidden = !!f && (row.dataset.material === 'new' || !text.includes(f));
+    });
+  };
+
+  // Elimina il record GLB e il file nello Storage.
+  const removeGlbResources = async (ids) => {
+    const list = ids.map((glbId) => resources.get(String(glbId))).filter(Boolean);
+    if (!list.length) return;
+    await q(sb.from('risorse_glb').delete().in('id_glb', list.map((r) => r.id_glb)));
+    const { error } = await sb.storage.from('modelli-glb').remove(list.map((r) => r.percorso_risorsa));
+    if (error) throw error;
+    list.forEach((r) => resources.delete(String(r.id_glb)));
+  };
+
+  $('#delete-all').onclick = async () => {
+    if (!confirm(`Eliminare TUTTI i ${materiali.length} materiali con i relativi GLB? I riferimenti sulle opzioni degli attributi verranno svuotati.`)) return;
+    const glbIds = materiali.map((m) => m.id_glb).filter(Boolean);
+    const ok = await act(async () => {
+      await q(sb.from('materiali').delete().gt('id_materiale', 0));
+      await removeGlbResources(glbIds);
+    }, 'Materiali eliminati');
+    if (ok) viewMateriali();
+  };
 
   const focusNewRow = (append) => {
     if (append) $('#materials').insertAdjacentHTML('beforeend', materialRow(null));
@@ -924,8 +987,9 @@ async function viewMateriali(idParam) {
     status.textContent = 'Caricamento…';
     try {
       const uploaded = await uploadGlbResource(file, 'Materiale', `materiali/${materialId === 'new' ? crypto.randomUUID() : materialId}`);
-      const select = $('[data-f=glb]', row);
-      select.add(new Option(file.name, uploaded.id_glb, true, true));
+      resources.set(String(uploaded.id_glb), { id_glb: uploaded.id_glb, nome_file: file.name, percorso_risorsa: uploaded.path });
+      row.dataset.glb = uploaded.id_glb;
+      $('[data-glb-name]', row).value = file.name;
       status.textContent = 'Caricato: premi Salva tutto per associarlo';
     } catch (error) {
       status.textContent = '';
@@ -944,8 +1008,12 @@ async function viewMateriali(idParam) {
     if (action !== 'delete') return;
     const materialId = event.target.closest('tr').dataset.material;
     const material = materiali.find((item) => String(item.id_materiale) === materialId);
-    if (!confirm(`Eliminare il materiale "${material.nome}"? Le opzioni collegate resteranno senza materiale.`)) return;
-    if (await act(() => q(sb.from('materiali').delete().eq('id_materiale', materialId)), 'Materiale eliminato')) event.target.closest('tr').remove();
+    if (!confirm(`Eliminare il materiale "${material.nome}" e il suo GLB? Le opzioni collegate resteranno senza materiale.`)) return;
+    const done = await act(async () => {
+      await q(sb.from('materiali').delete().eq('id_materiale', materialId));
+      await removeGlbResources([material.id_glb]);
+    }, 'Materiale eliminato');
+    if (done) event.target.closest('tr').remove();
   };
 
   const saveMaterials = async () => {
@@ -954,10 +1022,9 @@ async function viewMateriali(idParam) {
       const rec = {
         nome: $('[data-f=nome]', row).value.trim(),
         descrizione: $('[data-f=descrizione]', row).value.trim() || null,
-        rif_materiale_interno: $('[data-f=rif]', row).value.trim() || null,
-        id_glb: num($('[data-f=glb]', row).value),
+        id_glb: num(row.dataset.glb),
       };
-      if (materialId === 'new' && !rec.nome && !rec.descrizione && !rec.rif_materiale_interno && !rec.id_glb) return [];
+      if (materialId === 'new' && !rec.nome && !rec.descrizione && !rec.id_glb) return [];
       if (!rec.nome) throw new Error('Il nome del materiale è obbligatorio.');
       return [materialId === 'new' ? () => q(sb.from('materiali').insert(rec)) : () => q(sb.from('materiali').update(rec).eq('id_materiale', materialId))];
     });
@@ -1086,7 +1153,7 @@ async function viewCodifica(idParam) {
       <div class="row"><div class="field"><label for="flt-misura">Misura</label><select id="flt-misura"><option value="">Tutte</option>${misure.map((m) => `<option value="${m.id_misura}">${esc(measureLabel(m))}</option>`).join('')}</select></div>
         <div class="field"><label for="flt-text">Cerca</label><input id="flt-text" class="search" placeholder="Attributo, opzione, misura…"></div></div>
       <p class="muted" id="combo-count"></p>
-      <div class="table-scroll"><table><thead><tr><th>Misura</th><th>Combinazione</th><th>Codice commerciale</th><th>Descrizione commerciale</th><th>Prezzo</th></tr></thead><tbody id="combos"></tbody></table></div>
+      <div class="table-scroll"><table><thead><tr><th>Misura</th><th>Combinazione</th><th class="col-code">Codice commerciale</th><th>Descrizione commerciale</th><th>Prezzo</th></tr></thead><tbody id="combos"></tbody></table></div>
     </section>${saveBar()}`, crumbs);
   bindSelect();
 
@@ -1095,9 +1162,9 @@ async function viewCodifica(idParam) {
     $('#combo-count').textContent = `${visible.length} combinazioni su ${rows.length}${visible.length > MAX_SHOWN ? ` (mostrate le prime ${MAX_SHOWN}: usa i filtri)` : ''}.`;
     $('#combos').innerHTML = visible.slice(0, MAX_SHOWN).map(([r, i]) => `<tr data-i="${i}">
       <td>${esc(measureLabel(r.misura))}</td>
-      <td>${r.pairs.map(([a, o]) => `<span class="chip">${esc(attributeLabel(codingAttributes.find((x) => x.id === a)))}: ${esc(optionLabel(optionByKey.get(`${a}:${o}`)))}</span>`).join(' ') || '<span class="muted">—</span>'}</td>
-      <td><input data-f="codice" maxlength="100" value="${esc(r.codice)}" aria-label="Codice commerciale"></td>
-      <td><input data-f="descr" value="${esc(r.descr)}" aria-label="Descrizione commerciale"></td>
+      <td>${r.pairs.map(([a, o]) => `<div class="chip">${esc(attributeLabel(codingAttributes.find((x) => x.id === a)))}: ${esc(optionLabel(optionByKey.get(`${a}:${o}`)))}</div>`).join('') || '<span class="muted">—</span>'}</td>
+      <td class="col-code"><input data-f="codice" maxlength="100" value="${esc(r.codice)}" aria-label="Codice commerciale"></td>
+      <td class="col-descr"><input data-f="descr" value="${esc(r.descr)}" aria-label="Descrizione commerciale"></td>
       <td style="width:130px"><input data-f="prezzo" type="number" min="0" step="0.01" value="${esc(r.prices[listinoId])}" aria-label="Prezzo"></td></tr>`).join('')
       || '<tr><td colspan="5" class="empty">Nessuna combinazione.</td></tr>';
   };
@@ -1349,7 +1416,7 @@ async function route() {
   if (!session) return viewLogin();
   const [a, b] = location.hash.replace(/^#\/?/, '').split('/');
   try {
-    if (!a) return viewMenu();
+    if (!a) return await viewMenu();
     if (a === 'prodotti') return b ? await viewProdotto(b) : await viewProdotti();
     if (a === 'attributi') return b ? await viewAttributo(b) : await viewAttributi();
     if (a === 'materiali') return await viewMateriali(b);

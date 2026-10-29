@@ -155,6 +155,7 @@ main:has(.test-layout) { max-width: none; }
 td.col-dim, th.col-dim { width: 84px; }
 td.col-dim input, td.col-dim select { width: 84px; }
 td.col-glb { min-width: 280px; }
+.upload-status:empty { display: none; }
 th.col-narrow, td.col-narrow { width: 56px; text-align: center; }
 .chip { white-space: normal; }
 td .chip { display: block; width: fit-content; }

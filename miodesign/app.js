@@ -177,7 +177,7 @@ function shell(content, crumbs = []) {
     .join(icon('chevron'));
   app.innerHTML = `
     <header class="topbar">
-      <a class="brand" href="#/"><span class="brand-logo">${icon('cubeLogo')}</span><span>MIODesign<small>Manutenzione dati</small></span></a>
+      <a class="brand" href="#/"><span class="brand-logo">${icon('cubeLogo')}</span><span>MIOLite<small>Manutenzione dati</small></span></a>
       <div class="topbar-right"><span class="muted">${esc(session?.user?.email)}</span>
         <button class="small" id="logout">${btn('logout', 'Esci')}</button></div>
     </header>
@@ -189,7 +189,7 @@ function shell(content, crumbs = []) {
 function viewLogin() {
   app.innerHTML = `
     <div class="login-wrap"><form class="card login-card" id="login">
-      <span class="brand-logo">${icon('cubeLogo')}</span><h1>MIODesign</h1><p class="muted">Accedi per gestire i dati di prodotto.</p>
+      <span class="brand-logo">${icon('cubeLogo')}</span><h1>MIOLite</h1><p class="muted">Accedi per gestire i dati di prodotto.</p>
       ${configured ? '' : '<p class="notice">Configura SUPABASE_URL e SUPABASE_ANON_KEY in <code>config.js</code>.</p>'}
       <div class="field"><label for="email">Email</label><input id="email" type="email" required autocomplete="username"></div>
       <div class="field"><label for="password">Password</label><input id="password" type="password" required autocomplete="current-password"></div>
@@ -315,7 +315,7 @@ async function viewProdotto(idParam) {
       <td class="col-dim"><input type="number" step="any" data-f="dim_y" value="${esc(m?.dim_y)}" aria-label="Altezza"></td>
       <td class="col-dim"><input type="number" step="any" data-f="dim_z" value="${esc(m?.dim_z)}" aria-label="Profondità"></td>
       <td class="col-dim"><select data-f="unita_misura">${['cm', 'mm'].map((u) => `<option ${((m?.unita_misura) || 'cm') === u ? 'selected' : ''}>${u}</option>`).join('')}</select></td>
-      <td><div class="glb-field"><input data-glb-name readonly value="${esc(m?.risorse_glb?.nome_file)}" placeholder="Nessun GLB" aria-label="Nome GLB">
+      <td class="col-glb"><div class="glb-field"><input data-glb-name readonly value="${esc(m?.risorse_glb?.nome_file)}" placeholder="Nessun GLB" aria-label="Nome GLB">
         <label class="upload-button small btn">${icon('upload')}<span>Carica GLB</span><input type="file" data-f="glb" accept=".glb,model/gltf-binary" aria-label="Carica GLB oggetto"></label></div><span class="upload-status muted" data-upload-status></span></td>
       <td class="actions">${m ? `<button class="small danger" data-act="clear-glb">Rimuovi GLB</button> <button class="small danger" data-act="del">${btn('trash', 'Elimina')}</button>` : `<button class="small ghost" data-act="drop">${btn('close', 'Annulla')}</button>`}</td></tr>`;
 
@@ -1153,7 +1153,7 @@ async function viewCodifica(idParam) {
       <div class="row"><div class="field"><label for="flt-misura">Misura</label><select id="flt-misura"><option value="">Tutte</option>${misure.map((m) => `<option value="${m.id_misura}">${esc(measureLabel(m))}</option>`).join('')}</select></div>
         <div class="field"><label for="flt-text">Cerca</label><input id="flt-text" class="search" placeholder="Attributo, opzione, misura…"></div></div>
       <p class="muted" id="combo-count"></p>
-      <div class="table-scroll"><table><thead><tr><th>Misura</th><th>Combinazione</th><th class="col-code">Codice commerciale</th><th>Descrizione commerciale</th><th>Prezzo</th></tr></thead><tbody id="combos"></tbody></table></div>
+      <div class="table-scroll"><table class="coding-table"><thead><tr><th class="col-measure">Misura</th><th class="col-combination">Combinazione</th><th class="col-code">Codice commerciale</th><th class="col-descr">Descrizione commerciale</th><th class="col-price">Prezzo</th></tr></thead><tbody id="combos"></tbody></table></div>
     </section>${saveBar()}`, crumbs);
   bindSelect();
 
@@ -1161,11 +1161,16 @@ async function viewCodifica(idParam) {
     const visible = rows.map((r, i) => [r, i]).filter(([r]) => (!measureFilter || String(r.misura.id_misura) === measureFilter) && (!textFilter || r.text.includes(textFilter)));
     $('#combo-count').textContent = `${visible.length} combinazioni su ${rows.length}${visible.length > MAX_SHOWN ? ` (mostrate le prime ${MAX_SHOWN}: usa i filtri)` : ''}.`;
     $('#combos').innerHTML = visible.slice(0, MAX_SHOWN).map(([r, i]) => `<tr data-i="${i}">
-      <td>${esc(measureLabel(r.misura))}</td>
-      <td>${r.pairs.map(([a, o]) => `<div class="chip">${esc(attributeLabel(codingAttributes.find((x) => x.id === a)))}: ${esc(optionLabel(optionByKey.get(`${a}:${o}`)))}</div>`).join('') || '<span class="muted">—</span>'}</td>
+      <td class="col-measure">${esc(measureLabel(r.misura))}</td>
+      <td class="col-combination">${r.pairs.map(([a, o]) => {
+        const attribute = codingAttributes.find((x) => x.id === a);
+        const option = optionByKey.get(`${a}:${o}`);
+        return `<div class="combo-attribute"><div>${esc(attribute.nome)}${attribute.descrizione ? ` : ${esc(attribute.descrizione)}` : ''}</div>
+          <div>${esc(option.nome)}${option.descrizione ? ` : ${esc(option.descrizione)}` : ''}</div></div>`;
+      }).join('') || '<span class="muted">—</span>'}</td>
       <td class="col-code"><input data-f="codice" maxlength="100" value="${esc(r.codice)}" aria-label="Codice commerciale"></td>
       <td class="col-descr"><input data-f="descr" value="${esc(r.descr)}" aria-label="Descrizione commerciale"></td>
-      <td style="width:130px"><input data-f="prezzo" type="number" min="0" step="0.01" value="${esc(r.prices[listinoId])}" aria-label="Prezzo"></td></tr>`).join('')
+      <td class="col-price"><input data-f="prezzo" type="number" min="0" step="0.01" value="${esc(r.prices[listinoId])}" aria-label="Prezzo"></td></tr>`).join('')
       || '<tr><td colspan="5" class="empty">Nessuna combinazione.</td></tr>';
   };
   draw();
@@ -1235,7 +1240,7 @@ async function viewTest(idParam) {
   const prodotti = await q(sb.from('prodotti').select('id_prodotto, nome, validato').order('nome'));
   const id = idParam ? Number(idParam) : null;
   const picker = `<section class="card picker">
-      <div class="picker-head"><h2 style="margin:0">Prodotti <span class="muted" style="font-weight:400">· da validare in cima</span></h2>
+      <div class="picker-head"><h2 style="margin:0">Prodotti</h2>
         <div class="search-wrap">${icon('search')}<input class="search" id="pk-search" placeholder="Filtra o cerca…" aria-label="Filtra prodotti"></div></div>
       <div class="picker-list" id="pk-list" role="listbox"></div>
       <div class="picker-actions" id="pk-actions"></div></section>`;
@@ -1281,10 +1286,9 @@ async function viewTest(idParam) {
       <div><div class="product-preview-stage test-stage" id="testStage"></div><p class="preview-status muted" id="t-status" role="status"></p></div>
       <aside>
         <section class="card"><h2>Configurazione</h2>
-          ${attributes.map((a) => `<div class="field"><label for="t-attr-${a.id}">${esc(a.nome)}</label>
-            ${a.descrizione ? `<p class="muted">${esc(a.descrizione)}</p>` : ''}
+          ${attributes.map((a) => `<div class="field"><label for="t-attr-${a.id}">${esc(a.nome)}${a.descrizione ? ` : ${esc(a.descrizione)}` : ''}</label>
             <select id="t-attr-${a.id}" data-t-attr="${a.id}">
-            ${a.options.map((o) => `<option value="${o.id_opzione}" ${(a.defaultId ?? a.options[0].id_opzione) === o.id_opzione ? 'selected' : ''}>${esc(optionLabel(o))}</option>`).join('')}</select></div>`).join('') || '<p class="muted">Nessun attributo configurabile.</p>'}
+            ${a.options.map((o) => `<option value="${o.id_opzione}" ${(a.defaultId ?? a.options[0].id_opzione) === o.id_opzione ? 'selected' : ''}>${esc(o.nome)}${o.descrizione ? ` : ${esc(o.descrizione)}` : ''}</option>`).join('')}</select></div>`).join('') || '<p class="muted">Nessun attributo configurabile.</p>'}
         </section>
         <section class="card result-card"><h2>Risultato</h2><div id="t-result" class="muted">…</div></section>
       </aside></div>`, crumbs);

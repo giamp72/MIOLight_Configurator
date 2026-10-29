@@ -151,14 +151,24 @@ main:has(.test-layout) { max-width: none; }
 .menu-step { font-size: .95rem; }
 .glb-field { display: flex; align-items: center; gap: .4rem; min-width: 240px; }
 .glb-field input { flex: 1 1 auto; min-width: 0; }
-.glb-field .upload-button { flex: none; }
+.glb-field .upload-button { flex: none; margin-bottom: 0; }
 td.col-dim, th.col-dim { width: 84px; }
 td.col-dim input, td.col-dim select { width: 84px; }
+td.col-glb { min-width: 280px; }
 th.col-narrow, td.col-narrow { width: 56px; text-align: center; }
 .chip { white-space: normal; }
 td .chip { display: block; width: fit-content; }
 th.col-code, td.col-code { width: 150px; }
 td.col-descr { min-width: 360px; width: 45%; }
+.coding-table { min-width: 1160px; }
+.coding-table .col-measure { width: 180px; min-width: 180px; }
+.coding-table .col-combination { width: 340px; min-width: 340px; }
+.coding-table .col-code { width: 150px; }
+.coding-table .col-descr { width: 360px; min-width: 360px; }
+.coding-table .col-price { width: 130px; }
+.combo-attribute { margin-bottom: .45rem; }
+.combo-attribute:last-child { margin-bottom: 0; }
+.combo-attribute > div + div { padding-left: .65rem; }
 main:has(.mesh-layout) { max-width: 1600px; }
 .mesh-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 1.25rem; align-items: start; }
 .mesh-layout .preview-sticky { position: sticky; top: 4.5rem; }

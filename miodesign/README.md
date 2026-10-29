@@ -1,6 +1,6 @@
-# MIODesign — manutenzione dati
+# MIOLite — manutenzione dati
 
-Interfaccia web (HTML/JS statico, nessuna build) per la manutenzione dei dati di MIODesign (Parte II di `../analisi.pdf`), con database su Supabase. MIO Light non fa parte di questo progetto.
+Interfaccia web (HTML/JS statico, nessuna build) per la manutenzione dei dati di MIOLite (Parte II di `../analisi.pdf`), con database su Supabase.
 
 ## Funzioni
 - **Login** con Supabase Auth (email/password).

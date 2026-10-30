@@ -1,6 +1,6 @@
-# MIOLite — manutenzione dati
+# MIO Design — manutenzione dati
 
-Interfaccia web (HTML/JS statico, nessuna build) per la manutenzione dei dati di MIOLite (Parte II di `../analisi.pdf`), con database su Supabase.
+Interfaccia web (HTML/JS statico, nessuna build) per la manutenzione dei dati di prodotto utilizzati dal progetto MIOLite (Parte II di `../analisi.pdf`), con database su Supabase. L'applicazione si chiama MIO Design.
 
 ## Funzioni
 - **Login** con Supabase Auth (email/password).

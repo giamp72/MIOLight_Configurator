@@ -27,9 +27,8 @@ a:hover { text-decoration: underline; }
 .ico { width: 1.15em; height: 1.15em; flex: none; vertical-align: -.2em; stroke: currentColor; fill: none; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
 
 .topbar { position: sticky; top: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: .65rem 1.5rem; background: var(--card-raised); backdrop-filter: saturate(180%) blur(18px); -webkit-backdrop-filter: saturate(180%) blur(18px); border-bottom: 1px solid var(--line); }
-.brand { display: flex; align-items: center; gap: .65rem; font-weight: 700; letter-spacing: -.01em; text-decoration: none !important; color: var(--ink); }
-.brand-logo { width: 32px; height: 32px; border-radius: 9px; display: grid; place-items: center; color: #fff; background: linear-gradient(145deg, #4aa3ff, #0a60d8); }
-.brand small { display: block; font-weight: 500; font-size: .68rem; color: var(--muted); letter-spacing: .02em; }
+.brand { display: flex; align-items: center; text-decoration: none !important; }
+.brand-logo { display: block; width: 190px; height: auto; }
 .topbar-right { display: flex; align-items: center; gap: .9rem; font-size: .85rem; }
 main { max-width: none; margin: 0 auto; padding: 1.75rem 1.5rem 2.5rem; }
 .crumbs { display: flex; align-items: center; gap: .35rem; font-size: .85rem; margin-bottom: .9rem; color: var(--muted); }
@@ -52,7 +51,7 @@ main { max-width: none; margin: 0 auto; padding: 1.75rem 1.5rem 2.5rem; }
 
 .login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 1rem; }
 .login-card { width: 100%; max-width: 380px; padding: 2rem; text-align: center; }
-.login-card .brand-logo { width: 56px; height: 56px; border-radius: 15px; margin: 0 auto 1rem; }
+.login-card .brand-logo { width: min(100%, 280px); height: auto; margin: 0 auto 1rem; }
 .login-card .field { text-align: left; }
 
 label { display: block; font-size: .78rem; font-weight: 600; color: var(--muted); margin-bottom: .3rem; }
@@ -144,7 +143,9 @@ td.actions { white-space: nowrap; text-align: right; }
 .picker-item.selected { background: var(--accent-soft); font-weight: 600; }
 .picker-item span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .picker-actions { display: flex; align-items: center; gap: .75rem; flex-wrap: wrap; margin-top: .75rem; }
-.brand-logo .ico { width: 55%; height: 55%; }
+@media (prefers-color-scheme: dark) {
+  .brand-logo { filter: invert(1) hue-rotate(180deg); }
+}
 [hidden] { display: none !important; }
 
 .menu-step { font-size: .95rem; }

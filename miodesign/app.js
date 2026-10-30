@@ -150,7 +150,6 @@ const ICONS = {
   check: '<circle cx="12" cy="12" r="9"/><path d="m8 12.500 3 3 5-6"/>',
   save: '<path d="M5 4h11l3 3v12a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z"/><path d="M8 4v5h7V4M8 20v-6h8v6"/>',
   close: '<path d="m6 6 12 12M18 6 6 18"/>',
-  cubeLogo: '<path d="M12 3 4 7.500v9L12 21l8-4.500v-9L12 3Z"/><path d="m4 7.500 8 4.500 8-4.500M12 12v9"/>',
 };
 const icon = (name) => `<svg class="ico" viewBox="0 0 24 24" aria-hidden="true">${ICONS[name]}</svg>`;
 const btn = (name, label) => `${icon(name)}<span>${label}</span>`;
@@ -177,7 +176,7 @@ function shell(content, crumbs = []) {
     .join(icon('chevron'));
   app.innerHTML = `
     <header class="topbar">
-      <a class="brand" href="#/"><span class="brand-logo">${icon('cubeLogo')}</span><span>MIOLite<small>Manutenzione dati</small></span></a>
+      <a class="brand" href="#/" aria-label="MIO Design"><img class="brand-logo" src="./logo.svg" alt="MIO Design"></a>
       <div class="topbar-right"><span class="muted">${esc(session?.user?.email)}</span>
         <button class="small" id="logout">${btn('logout', 'Esci')}</button></div>
     </header>
@@ -189,7 +188,7 @@ function shell(content, crumbs = []) {
 function viewLogin() {
   app.innerHTML = `
     <div class="login-wrap"><form class="card login-card" id="login">
-      <span class="brand-logo">${icon('cubeLogo')}</span><h1>MIOLite</h1><p class="muted">Accedi per gestire i dati di prodotto.</p>
+      <img class="brand-logo" src="./logo.svg" alt="MIO Design"><h1>Accedi a MIO Design</h1><p class="muted">Gestisci i dati di prodotto utilizzati da MIOLite.</p>
       ${configured ? '' : '<p class="notice">Configura SUPABASE_URL e SUPABASE_ANON_KEY in <code>config.js</code>.</p>'}
       <div class="field"><label for="email">Email</label><input id="email" type="email" required autocomplete="username"></div>
       <div class="field"><label for="password">Password</label><input id="password" type="password" required autocomplete="current-password"></div>
